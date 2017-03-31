@@ -1,9 +1,10 @@
-function jacobi_davidson{T <: AbstractLinearMap, Algorithm<:CorrectionSolver}(
+function jacobi_davidson{T <: AbstractLinearMap, Alg<:CorrectionSolver, Target<:Target}(
   A::T, 
-  solver::Algorithm, 
+  solver::Alg,
   krylov_dim::Int; 
-  num::Int = 2, 
+  # num::Int = 2,  # For now we'll return 1 eigenpair
   expansions::Int = 5, 
+  target::Target = LM(),
   ɛ::Float64 = 1e-6)
 
   dim = krylov_dim + expansions
@@ -31,12 +32,15 @@ function jacobi_davidson{T <: AbstractLinearMap, Algorithm<:CorrectionSolver}(
   for k = krylov_dim : dim - 1
 
     # Factorize the Hessenberg matrix into Schur form
+    # TODO: use Givens rotations and do this on the fly.
     F = schurfact(H[1 : k, 1 : k])
 
-    # Reorder the Schur form with the `num` largest eigs in front
-    p = sortperm(abs(F[:values]), rev = true)
+    @show abs(H[1 : k, 1 : k]) .> 0
+
+    # Reorder the Schur form
+    permutation = schur_permutation(target, F)
     Π = falses(k)
-    Π[p[1 : num]] = true
+    Π[permutation[1]] = true
     ordschur!(F, Π)
 
     # Take a Ritz pair (θ, y)
@@ -46,34 +50,13 @@ function jacobi_davidson{T <: AbstractLinearMap, Algorithm<:CorrectionSolver}(
     # Approximate eigenpair (θ, u)
     u .= V[:, 1 : k] * y
 
-    solver(A, θ, u)
-
-    # Define the residual mapping
-    R = LinearMap(x -> A * x - θ * x, nothing, n)
-    
-    # Projection Cⁿ → Cⁿ ∖ span {u}: Px = (I - uu')x
-    P = LinearMap(x -> x - dot(u, x) * u, nothing, n; ishermitian = true)
-    
-    # Coefficient matrix A - θI : Cⁿ ∖ span {u} -> Cⁿ ∖ span {u}
-    C = P * R * P
-
-    # Residual
-    r = R * u
-
-    @show norm(r)
-
-    if norm(r) < ɛ
+    # Have we converged yet? TODO: can do without MV product
+    if norm(A * u - θ * u) < ɛ
       return θ, u
     end
 
-    # Let's solve the correction eqn exactly for now.
-    # Ã = [(A.lmap - θ * speye(n)) u; u' 0]
-    # rhs = [-r; 0]
-    # v = (Ã \ rhs)[1 : n]
-
-    # Solve the correction equation approximately
-    v = gmres(C, -r)
-    # expand!(V, H, v, k)
+    # Solve the correction equation
+    v = solve_correction(solver, A, θ, u)
 
     # Orthogonalize
     for j = 1 : k
@@ -81,27 +64,14 @@ function jacobi_davidson{T <: AbstractLinearMap, Algorithm<:CorrectionSolver}(
     end
     v /= norm(v)
 
-    # Expand
+    # Expand (TODO: make this efficient)
     V[:, k + 1] = v
     H[k + 1, 1 : k] = v' * W
     w = A * v
     W = [W w]
     H[1 : k + 1, k + 1] = V[:, 1 : k + 1]' * w
-
-    @show H[1 : k + 1, 1 : k + 1]
   end
 
   θ, u
 end
 
-function expand!(V::AbstractMatrix, H::AbstractMatrix, w::AbstractVector, k::Int)
-
-  # Orthogonalize using Gramm-Schmidt
-  for j = 1 : k
-    H[j, k] = dot(w, V[:, j])
-    w -= H[j, k] * V[:, j]
-  end
-
-  H[k + 1, k] = norm(w)
-  V[:, k + 1] = w / H[k + 1, k]
-end

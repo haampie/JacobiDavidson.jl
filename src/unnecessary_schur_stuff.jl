@@ -1,4 +1,6 @@
-# The code below was already native in Julia ;)
+# Since Julia does not natively support an *explicit* ordering
+# of the Schur diagonal elements (only a splitting in two groups)
+# this code might be useful later, but not right now
 
 
 # Returns a Givens rotation that swaps two consecutive
