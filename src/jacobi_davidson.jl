@@ -35,8 +35,6 @@ function jacobi_davidson{T <: AbstractLinearMap, Alg<:CorrectionSolver, Target<:
     # TODO: use Givens rotations and do this on the fly.
     F = schurfact(H[1 : k, 1 : k])
 
-    @show abs(H[1 : k, 1 : k]) .> 0
-
     # Reorder the Schur form
     permutation = schur_permutation(target, F)
     Π = falses(k)
