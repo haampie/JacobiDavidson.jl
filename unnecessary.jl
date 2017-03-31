@@ -1,3 +1,6 @@
+# The code below was already native in Julia ;)
+
+
 # Returns a Givens rotation that swaps two consecutive
 # diagonal elements [λ α; 0 μ] --> [μ β; 0 λ]
 function given_swap(λ, μ, α)
@@ -6,8 +9,6 @@ function given_swap(λ, μ, α)
   s = c * t
   c, s
 end
-
-
 
 function swap_schur!(Q::AbstractMatrix, S::AbstractMatrix, from::Int, to::Int)
   # Move S[from, from] to S[to, to] via Givens rotations
