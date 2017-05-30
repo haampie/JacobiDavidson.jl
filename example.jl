@@ -2,10 +2,11 @@ module Tst
 
 import LinearMaps: LinearMap
 
-using JacobiDavidson: 
-  exact_solver, 
-  gmres_solver, 
+using JacobiDavidson:
+  exact_solver,
+  gmres_solver,
   jacobi_davidson,
+  jacobi_davidson_hermetian,
   LM, SM, Near
 
 function alright_conditioned_matrix_with_separated_eigs(n::Int = 100)
@@ -27,5 +28,15 @@ function testing(;krylov = 10, expansions = 5)
 
   @time jacobi_davidson(B, exact, krylov, expansions = expansions, target = target)
   @time jacobi_davidson(B, gmres, krylov, expansions = expansions, target = target)
+end
+
+function hermetian_example(; n = 20, max = 20)
+  A = Symmetric(sprand(n, n, .2) + 5.0 * speye(n))
+
+  exact = exact_solver()
+
+  D, X, res = jacobi_davidson_hermetian(LinearMap(A, isposdef = false), exact)
+
+  X, D, res
 end
 end

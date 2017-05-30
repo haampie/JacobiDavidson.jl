@@ -36,7 +36,7 @@ function solve_correction{T <: AbstractLinearMap}(solver::exact_solver, A::T, θ
 
   # This method is *not* matrix-free (TODO: assert this or specify solve_correction)
 
-  # Here we solve the augmented system 
+  # Here we solve the augmented system
   # [A - θI, u; u' 0][t; y] = [-r; 0] for t,
   # which is equivalent to solving (A - θI) t = -r
   # for t ⟂ u.
@@ -45,6 +45,29 @@ function solve_correction{T <: AbstractLinearMap}(solver::exact_solver, A::T, θ
   r = A * u - θ * u
   Ã = [(A.lmap - θ * speye(n)) u; u' 0]
   rhs = [-r; 0]
+  (Ã \ rhs)[1 : n]
+end
+
+function solve_deflated_correction{T <: AbstractLinearMap}(solver::exact_solver, A::T, θ, X::AbstractMatrix, u::AbstractVector)
+  # The exact solver is mostly useful for testing Jacobi-Davidson
+  # method itself and should result in quadratic convergence.
+  # However, in general the correction equation should be solved
+  # only approximately in a fixed number of GMRES / BiCGStab
+  # iterations to reduce computation costs.
+
+  # This method is *not* matrix-free (TODO: assert this or specify solve_correction)
+
+  # Here we solve the augmented system
+  # [A - θI, [X, u]; [X, u]' 0][t; y] = [-r; 0] for t,
+  # which is equivalent to solving (A - θI) t = -r
+  # for t ⟂ X and t ⟂ u.
+
+  n = size(A, 1)
+  r = A * u - θ * u
+  Q = [X u]
+  m = size(Q, 2)
+  Ã = [(A.lmap - θ * speye(n)) Q; Q' zeros(m, m)]
+  rhs = [-r; zeros(m, 1)]
   (Ã \ rhs)[1 : n]
 end
 
