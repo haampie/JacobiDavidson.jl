@@ -1,4 +1,4 @@
-function jacobi_davidson_hermetian{Alg <: CorrectionSolver}(
+function jacobi_davidson_nonhermetian{Alg <: CorrectionSolver}(
   A,                       # Some square Hermetian matrix
   solver::Alg;             # Solver for the correction equation
   pairs::Int = 5,          # Number of eigenpairs wanted
@@ -54,10 +54,12 @@ function jacobi_davidson_hermetian{Alg <: CorrectionSolver}(
     # Add A * V[m]
     push!(W, A * V[m])
 
-    # Update the upper triangular part of the Galerkin matrix
-    for i = 1 : m
+    # Update the Galerkin approximation
+    for i = 1 : m - 1
       M[i, m] = dot(V[i], W[m])
+      M[m, i] = dot(V[m], W[i])
     end
+    M[m, m] = dot(V[m], W[m])
 
     # Compute the Ritz values and pre-Ritz vectors; here we exploit symmetry
     # M S = S diagm(θs) with S orthonormal

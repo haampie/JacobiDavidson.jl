@@ -48,7 +48,7 @@ function solve_correction{T <: AbstractLinearMap}(solver::exact_solver, A::T, θ
   (Ã \ rhs)[1 : n]
 end
 
-function solve_deflated_correction{T <: AbstractLinearMap}(solver::exact_solver, A::T, θ, X::AbstractMatrix, u::AbstractVector)
+function solve_deflated_correction(solver::exact_solver, A, θ, X::AbstractMatrix, u::AbstractVector, r::AbstractVector)
   # The exact solver is mostly useful for testing Jacobi-Davidson
   # method itself and should result in quadratic convergence.
   # However, in general the correction equation should be solved
@@ -63,10 +63,9 @@ function solve_deflated_correction{T <: AbstractLinearMap}(solver::exact_solver,
   # for t ⟂ X and t ⟂ u.
 
   n = size(A, 1)
-  r = A * u - θ * u
   Q = [X u]
   m = size(Q, 2)
-  Ã = [(A.lmap - θ * speye(n)) Q; Q' zeros(m, m)]
+  Ã = [(A - θ * speye(n)) Q; Q' zeros(m, m)]
   rhs = [-r; zeros(m, 1)]
   (Ã \ rhs)[1 : n]
 end
