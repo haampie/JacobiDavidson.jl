@@ -7,6 +7,7 @@ using JacobiDavidson:
   gmres_solver,
   jacobi_davidson,
   jacobi_davidson_hermetian,
+  jacobi_davidson_nonhermetian,
   LM, SM, Near
 
 function alright_conditioned_matrix_with_separated_eigs(n::Int = 100)
@@ -37,22 +38,24 @@ function book_example()
   A[1000, 1] = 0.5
   A[1, 1000] = 0.5
 
-  v = fill(0.01, n)
-  v[end] = 1.0
+  v = fill(0.01 + 0.0im, n)
+  v[end] = 1.0 + 0.0im
 
   exact = exact_solver()
 
-  jacobi_davidson_hermetian(
+  Q, R, res = jacobi_davidson_nonhermetian(
     A,
     exact,
     pairs = 10,
     min_dimension = 10,
-    max_dimension = 15,
+    max_dimension = 20,
     max_iter = 500,
-    ɛ = 1e-8,
-    target = 1000.5,
+    ɛ = 1e-9,
+    target = Near(998.5),
     v0 = v
   )
+
+  A, Q, R, res
 end
 
 function hermetian_example(; n = 200, min = 10, max = 30, )
