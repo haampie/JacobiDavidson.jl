@@ -12,29 +12,15 @@ type SM <: Target end
 
 # For finding eigenvalues with the smallest magnitude
 type LM <: Target end
-    
+
 # For finding eigenvalues with the largest real part
 type LR <: Target end
-    
+
 # For finding eigenvalues with the smallest real part
 type SR <: Target end
 
-function schur_permutation(target::Near, F::Schur)
-  sortperm(abs(F[:values] - target.target))
-end
-
-function schur_permutation(target::LM, F::Schur)
-  sortperm(abs(F[:values]), rev = true)
-end
-
-function schur_permutation(target::SM, F::Schur)
-  sortperm(abs(F[:values]))
-end
-
-function schur_permutation(target::LR, F::Schur)
-  sortperm(real(F[:values]), rev = true)
-end
-
-function schur_permutation(target::SR, F::Schur)
-  sortperm(real(F[:values]))
-end
+schur_permutation(target::Near, θs) = sortperm(abs(θs - target.target))
+schur_permutation(target::LM, θs) = sortperm(abs(θs), rev = true)
+schur_permutation(target::SM, θs) = sortperm(abs(θs))
+schur_permutation(target::LR, θs) = sortperm(real(θs), rev = true)
+schur_permutation(target::SR, θs) = sortperm(real(θs))
