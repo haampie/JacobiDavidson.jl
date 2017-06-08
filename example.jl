@@ -8,6 +8,7 @@ using JacobiDavidson:
   jacobi_davidson,
   jacobi_davidson_hermetian,
   jacobi_davidson_nonhermetian,
+  jacobi_davidson_harmonic,
   LM, SM, Near
 
 function alright_conditioned_matrix_with_separated_eigs(n::Int = 100)
@@ -41,16 +42,16 @@ function book_example()
   v = fill(0.01 + 0.0im, n)
   v[end] = 1.0 + 0.0im
 
-  Q, R, res = jacobi_davidson_nonhermetian(
+  Q, R, res = jacobi_davidson_harmonic(
     A,
-    gmres_solver(iterations = 5),
-    # exact_solver(),
+    # gmres_solver(iterations = 5),
+    exact_solver(),
     pairs = 10,
     min_dimension = 10,
     max_dimension = 15,
     max_iter = 500,
     ɛ = 1e-8,
-    target = Near(1000.5),
+    target = Near(40.5),
     v0 = v
   )
 

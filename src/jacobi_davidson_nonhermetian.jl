@@ -2,7 +2,7 @@ function jacobi_davidson_nonhermetian{Alg <: CorrectionSolver, Tn}(
   A,                       # Some square Hermetian matrix
   solver::Alg;             # Solver for the correction equation
   pairs::Int = 5,          # Number of eigenpairs wanted
-  max_dimension::Int = 80, # Maximal search space size
+  max_dimension::Int = 20, # Maximal search space size
   min_dimension::Int = 10, # Minimal search space size
   max_iter::Int = 200,
   target::Target = LM(),   # Search target
