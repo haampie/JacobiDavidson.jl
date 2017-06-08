@@ -2,6 +2,8 @@ module Tst
 
 import LinearMaps: LinearMap
 
+using Plots
+
 using JacobiDavidson:
   exact_solver,
   gmres_solver,
@@ -42,20 +44,25 @@ function book_example()
   v = fill(0.01 + 0.0im, n)
   v[end] = 1.0 + 0.0im
 
-  Q, R, res = jacobi_davidson_harmonic(
+  ritz_his = jacobi_davidson_harmonic(
     A,
     # gmres_solver(iterations = 5),
     exact_solver(),
     pairs = 10,
     min_dimension = 10,
-    max_dimension = 15,
+    max_dimension = 40,
     max_iter = 500,
     ɛ = 1e-8,
-    target = Near(40.5),
+    target = Near(0.5),
     v0 = v
   )
 
-  A, Q, R, res
+  p = plot()
+  for (k, thetas) = enumerate(ritz_his)
+    @show norm(thetas)
+    scatter!(real(thetas), k * ones(k))
+  end
+  p
 end
 
 function hermetian_example(; n = 200, min = 10, max = 30, )

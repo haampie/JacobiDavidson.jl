@@ -9,6 +9,7 @@ function jacobi_davidson_harmonic{Alg <: CorrectionSolver, Tn}(
   ɛ::Float64 = 1e-7,           # Maximum residual norm
   v0::Vector{Tn} = rand(Tn, size(A, 1))
 )
+  ritz_history = []
 
   residuals::Vector{Float64} = []
 
@@ -52,7 +53,7 @@ function jacobi_davidson_harmonic{Alg <: CorrectionSolver, Tn}(
     end
 
     # Normalize the new vector
-    V[m + 1] *= 1.0 / norm(V[m + 1])
+    V[m + 1] /= norm(V[m + 1])
 
     # Store (A - tI) * V[m + 1]
     push!(AV, A * V[m + 1] - target.target * V[m + 1])
@@ -67,12 +68,14 @@ function jacobi_davidson_harmonic{Alg <: CorrectionSolver, Tn}(
 
     # Orthogonalize W[m + 1] with respect to W[1..m] using modified Gram-Schmidt
     for i = 1 : m
-        MA[i, m] = dot(W[m + 1], W[i])
-        W[m + 1] -= MA[i, m] * W[i]
+        MA[i, m + 1] = dot(W[m + 1], W[i])
+        W[m + 1] -= MA[i, m + 1] * W[i]
     end
+    MA[m + 1, m + 1] = norm(W[m + 1])
+    W[m + 1] /= MA[m + 1, m + 1]
 
     # Update the M = W' * V matrix
-    M[m + 1, m + 1] = dot(V[m + 1], W[m + 1])
+    M[m + 1, m + 1] = dot(W[m + 1], V[m + 1])
     for i = 1 : m
       M[i, m + 1] = dot(W[i], V[m + 1])
       M[m + 1, i] = dot(W[m + 1], V[i])
@@ -82,15 +85,17 @@ function jacobi_davidson_harmonic{Alg <: CorrectionSolver, Tn}(
     m += 1
 
     # Compute the generalized Schur decomposition
-    #  M Z = Z T with Z unitary & T upper triangular
-    F = schurfact(@view(MA[1 : m, 1 : m]), @view(MA[1 : m, 1 : m]))
+    # M Z = Z T with Z unitary & T upper triangular
+    F = schurfact(@view(MA[1 : m, 1 : m]), @view(M[1 : m, 1 : m]))
     θs = F.alpha ./ F.beta
 
     # Sort the Schur form (only the single most promising vector must be moved up front)
-    permutation = schur_permutation(target, θs)
+    permutation = schur_permutation(SM(), θs)
     Π = falses(m)
     Π[permutation[1]] = true
     ordschur!(F, Π)
+
+    push!(ritz_history, target.target + F.alpha ./ F.beta)
 
     # For expansion we work with the Rayleigh quotient, so that the residual is automatically
     # perpendicular to the Ritz vector.
@@ -103,7 +108,8 @@ function jacobi_davidson_harmonic{Alg <: CorrectionSolver, Tn}(
     u = mv_product(V, y, m)
 
     # Compute the residual (A - tI)u - rayleigh * u = AV * y - rayleigh * u
-    r = mv_product(AV, y, m) - rayleigh * u
+    r = A * u - (target.target + rayleigh) * u
+    # r = mv_product(AV, y, m) - rayleigh * u
     z = Q[:, 1 : k]' * r
 
     # r_proj = (I - QQ')r is the residual without other Schur directions.
@@ -112,6 +118,8 @@ function jacobi_davidson_harmonic{Alg <: CorrectionSolver, Tn}(
     r_proj = r - Q[:, 1 : k] * z
 
     push!(residuals, norm(r_proj))
+
+    @show last(residuals)
 
     # Find one (or more) converged eigenpairs
     while norm(r_proj) ≤ ɛ
@@ -187,6 +195,8 @@ function jacobi_davidson_harmonic{Alg <: CorrectionSolver, Tn}(
     # Do a restart
     if m == max_dimension
 
+      return ritz_history
+
       # We want to make a change of basis so that V spans the most interesting
       # Schur vectors only. Therefore we must reorder the Schur form, taking the
       # first min_dimension Schur vectors to the first columns
@@ -246,8 +256,11 @@ function jacobi_davidson_harmonic{Alg <: CorrectionSolver, Tn}(
     end
 
     # Solve the correction equation
-    # push!(V, -r)
-    push!(V, solve_deflated_correction(solver, A, rayleigh, @view(Q[:, 1 : k]), u, r))
+    if iter < 3
+      push!(V, r)
+    else
+      push!(V, solve_deflated_correction(solver, A, rayleigh, @view(Q[:, 1 : k]), u, r))
+    end
 
     iter += 1
   end
