@@ -34,24 +34,23 @@ end
 function book_example()
   n = 1000
 
-  A = spdiagm((fill(0.5, n - 1), linspace(1, n, n), fill(0.5, n - 1)), (-1, 0, 1))
+  A = spdiagm((fill(0.5, n - 1), linspace(1.0, n, n), fill(0.5, n - 1)), (-1, 0, 1))
   A[1000, 1] = 0.5
   A[1, 1000] = 0.5
 
   v = fill(0.01 + 0.0im, n)
   v[end] = 1.0 + 0.0im
 
-  exact = exact_solver()
-
   Q, R, res = jacobi_davidson_nonhermetian(
     A,
-    exact,
+    gmres_solver(iterations = 5),
+    # exact_solver(),
     pairs = 10,
     min_dimension = 10,
-    max_dimension = 20,
+    max_dimension = 15,
     max_iter = 500,
-    ɛ = 1e-9,
-    target = Near(998.5),
+    ɛ = 1e-8,
+    target = Near(1000.5),
     v0 = v
   )
 

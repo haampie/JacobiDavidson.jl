@@ -1,4 +1,4 @@
-function jacobi_davidson_nonhermetian{Alg <: CorrectionSolver, T}(
+function jacobi_davidson_nonhermetian{Alg <: CorrectionSolver, Tn}(
   A,                       # Some square Hermetian matrix
   solver::Alg;             # Solver for the correction equation
   pairs::Int = 5,          # Number of eigenpairs wanted
@@ -7,7 +7,7 @@ function jacobi_davidson_nonhermetian{Alg <: CorrectionSolver, T}(
   max_iter::Int = 200,
   target::Target = LM(),   # Search target
   ɛ::Float64 = 1e-7,       # Maximum residual norm
-  v0::Vector{T} = rand(T, size(A, 1))
+  v0::Vector{Tn} = rand(Tn, size(A, 1))
 )
 
   residuals::Vector{Float64} = []
@@ -42,11 +42,11 @@ function jacobi_davidson_nonhermetian{Alg <: CorrectionSolver, T}(
 
     # Orthogonalize V[m + 1] w.r.t. {V[1], …, V[m]} using modified Gramm-Schmidt
     for i = 1 : m
-      @blas! V[m + 1] -= dot(V[m + 1], V[i]) * V[i]
+      V[m + 1] -= dot(V[m + 1], V[i]) * V[i]
     end
 
     # Normalize the new vector
-    @blas! V[m + 1] *= 1.0 / norm(V[m + 1])
+    V[m + 1] *= 1.0 / norm(V[m + 1])
 
     # Increment the search subspace dimension
     m += 1
@@ -68,9 +68,9 @@ function jacobi_davidson_nonhermetian{Alg <: CorrectionSolver, T}(
     permutation = schur_permutation(target, θs)
     Π = falses(m)
     Π[permutation[1]] = true
-    _, _, Θs = ordschur!(T, Z, Π)
+    _, _, θs = ordschur!(T, Z, Π)
 
-    θ = Θs[1]
+    θ = θs[1]
     y = Z[:, 1]
 
     # Consider the first pre-Ritz vector
@@ -131,22 +131,22 @@ function jacobi_davidson_nonhermetian{Alg <: CorrectionSolver, T}(
 
       T = eye(Complex{Float64}, m)
       Z = T[1 : m, 1 : m]
-      θs = θs[2 : end]
+      θs = θs[1 : end - 1]
 
       # Sort the Schur form (only the most promising vector must be moved up front)
       permutation = schur_permutation(target, θs)
       Π = falses(m)
       Π[permutation[1]] = true
-      _, _, Θs = ordschur!(T, Z, Π)
+      _, _, θs = ordschur!(T, Z, Π)
 
-      θ = Θs[1]
+      θ = θs[1]
       y = Z[:, 1]
       u = mv_product(V, y, m)
       r = A * u - θ * u
       z = Q[:, 1 : k]' * r
       r_proj = r - Q[:, 1 : k] * z
 
-      push!(residuals, norm(r_proj))
+      # push!(residuals, norm(r_proj))
     end
 
     # Do a restart
@@ -175,16 +175,14 @@ function jacobi_davidson_nonhermetian{Alg <: CorrectionSolver, T}(
 
       M = zeros(Complex{Float64}, max_dimension, max_dimension)
       M[1 : m, 1 : m] = T[1 : m, 1 : m]
+
       V = my_V
       W = my_W
     end
 
     # Solve the correction equation
-    if iter < 3
-      push!(V, r)
-    else
-      push!(V, solve_deflated_correction(solver, A, θ, Q[:, 1 : k], u, r))
-    end
+    # push!(V, -r)
+    push!(V, solve_deflated_correction(solver, A, θ, Q[:, 1 : k], u, r))
 
     iter += 1
   end
@@ -196,7 +194,7 @@ end
 function mv_product{T}(V::Vector{Vector{T}}, x::Vector{T}, m)
   u = V[1] * x[1]
   for i = 2 : m
-    @blas! u += x[i] * V[i]
+    u += x[i] * V[i]
   end
   u
 end

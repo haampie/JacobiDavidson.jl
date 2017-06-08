@@ -70,6 +70,24 @@ function solve_deflated_correction(solver::exact_solver, A, θ, X::AbstractMatri
   (Ã \ rhs)[1 : n]
 end
 
+function solve_deflated_correction(solver::gmres_solver, A, θ, X::AbstractMatrix, u::AbstractVector, r::AbstractVector)
+  n = size(A, 1)
+
+  # Define the residual mapping
+  R = LinearMap(x -> A * x - θ * x, nothing, n)
+
+  # Projection Cⁿ → Cⁿ ∖ span {u}: P1x = (I - uu')x
+  P1 = LinearMap(x -> x - dot(u, x) * u, nothing, n; ishermitian = true)
+
+  # Projection Cⁿ → Cⁿ ∖ span {X}: P2x = (I - XX')x
+  P2 = LinearMap(x -> x - X * (X' * x), nothing, n; ishermitian = true)
+
+  # Coefficient matrix A - θI restricted map: Cⁿ ∖ span {Q} -> Cⁿ ∖ span {Q}
+  C = P1 * P2 * R
+
+  gmres(C, -r, max_iter = solver.iterations, ɛ = solver.tolerance)
+end
+
 function gmres{T <: AbstractLinearMap}(A::T, b::AbstractVector; max_iter::Int = 5, ɛ::Float64 = 1e-6)
   # This is a poor man's impl. of GMRES, but it will be replaced by
   # a solver from IterativeSolvers.jl anyway; although a minimalist version could be faster.
@@ -84,7 +102,8 @@ function gmres{T <: AbstractLinearMap}(A::T, b::AbstractVector; max_iter::Int = 
   # Create a Krylov subspace of dimension max_iter
   for k = 1 : max_iter
     # Add the (k + 1)th basis vector
-    expand!(V, H, A * V[:, k], k)
+    V[:, k + 1] = A * V[:, k]
+    expand!(V, H, k)
   end
 
   # Solve the low-dimensional problem
