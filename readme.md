@@ -8,12 +8,11 @@ Todo:
  - [x] Targeting largest or smallest magnitude OR smallest or largest real part OR near a specified target in the complex plane
  - [x] Single eigenpair extraction
  - [ ] Adding tests
- - [ ] Handle QR decomposition on the fly rather than resorting to schurfact.
  - [ ] Preconditioning
  - [ ] Efficient implementation for Hermitian matrices (+ BiCGStab)
- - [ ] Multiple eigenpairs & locking
- - [ ] Implicit restart
- - [ ] Convergence history / status
+ - [x] Multiple eigenpairs & locking
+ - [x] Implicit restart
+ - [x] Convergence history / status
  - [ ] Use harmonic Ritz values rather than Ritz values for better approximations of interior eigenvalues.
 
 
