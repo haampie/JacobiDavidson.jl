@@ -6,8 +6,7 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
   min_dimension::Int = 10, # Minimal search space size
   max_iter::Int = 200,
   τ::Float64 = 40.0,       # Search target
-  ɛ::Float64 = 1e-7,       # Maximum residual norm
-  v0 = rand(Complex128, size(A, 1))
+  ɛ::Float64 = 1e-7       # Maximum residual norm
 )
 
   residuals::Vector{Float64} = []
