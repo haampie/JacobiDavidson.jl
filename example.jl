@@ -11,6 +11,7 @@ using JacobiDavidson:
   jacobi_davidson_hermetian,
   jacobi_davidson_nonhermetian,
   jacobi_davidson_harmonic,
+  harmonic_ritz_test,
   LM, SM, Near
 
 function alright_conditioned_matrix_with_separated_eigs(n::Int = 100)
@@ -38,8 +39,8 @@ function book_example()
   n = 1000
 
   A = spdiagm((fill(0.5, n - 1), linspace(1.0, n, n), fill(0.5, n - 1)), (-1, 0, 1))
-  A[1000, 1] = 0.5
-  A[1, 1000] = 0.5
+  A[n, 1] = 0.5
+  A[1, n] = 0.5
 
   v = fill(0.01 + 0.0im, n)
   v[end] = 1.0 + 0.0im
@@ -82,5 +83,43 @@ function hermetian_example(; n = 200, min = 10, max = 30, )
   )
 
   X, D, res
+end
+
+function test_harmonic(; n = 1000, τ = 10.5)
+  A = spdiagm((fill(0.5, n - 1), linspace(1.0, n, n), fill(0.5, n - 1)), (-1, 0, 1))
+  λs = real(eigvals(full(A)))
+
+  Q, R, ritz_hist, conv_hist, residuals = harmonic_ritz_test(
+    A,
+    gmres_solver(iterations = 15),
+    pairs = 10,
+    min_dimension = 10,
+    max_dimension = 20,
+    max_iter = 3 * n,
+    ɛ = 1e-8,
+    τ = τ
+  )
+
+  # Converged eigenvalues.
+  @show diag(R)
+
+  # Total number of iterations
+  iterations = length(ritz_hist)
+
+  # Plot the target as a vertical line
+  p = plot([τ, τ], [0.0, iterations + 1.0], linewidth=5, legend = :none, layout = (2, 1))
+
+  # Plot the actual eigenvalues
+  scatter!(λs, fill(iterations + 1, n), xlabel = "Real line", ylabel = "Iteration", yticks = 0 : 5 : iterations, xlims = (minimum(λs) - 2.0, maximum(λs) + 2.0), marker = (:diamond, :black), subplot = 1)
+  
+  # Plot the approximate eigenvalues per iteration
+  for (k, (ritzvalues, eigenvalues)) = enumerate(zip(ritz_hist, conv_hist))
+    scatter!(real(ritzvalues), k * ones(length(ritzvalues)), marker = (:+, :green), subplot = 1)
+    scatter!(real(eigenvalues), k * ones(length(eigenvalues)), marker = (:hexagon, :yellow), subplot = 1)
+  end
+
+  plot!(residuals, xlabel = "Iteration", label = "Residual", yaxis = :log10, subplot = 2)
+
+  p
 end
 end
