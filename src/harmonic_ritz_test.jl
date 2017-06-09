@@ -68,7 +68,10 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
     # Expand W with (A - τI)V, and then orthogonalize
     W[:, m + 1] = AV[:, m + 1]
 
-    # Orthogonalize w.r.t. the converged Schur vectors
+    # Orthogonalize w.r.t. the converged Schur vectors using Gram-Schmidt
+    for i = 1 : k
+      W[:, m + 1] -= dot(Q[:, i], W[:, m + 1]) * Q[:, i]
+    end
     # orthogonalize_to_columns!(@view(W[:, m + 1]), @view(Q[:, 1 : k]))
 
     # Orthogonalize W[:, m + 1] w.r.t. previous columns of W
@@ -139,9 +142,9 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
       ordschur!(F, p)
 
       # Shrink V, W and AV and update M and MA.
-      V[:, 1 : m - 1] = V[:, 1 : m] * F[:right][:, 1 : m - 1]
-      W[:, 1 : m - 1] = W[:, 1 : m] * F[:left][:, 1 : m - 1]
-      AV[:, 1 : m - 1] = AV[:, 1 : m] * F[:right][:, 1 : m - 1]
+      V[:, 1 : m - 1] = @view(V[:, 1 : m]) * @view(F[:right][:, 1 : m - 1])
+      W[:, 1 : m - 1] = @view(W[:, 1 : m]) * @view(F[:left][:, 1 : m - 1])
+      AV[:, 1 : m - 1] = @view(AV[:, 1 : m]) * @view(F[:right][:, 1 : m - 1])
       M[1 : m - 1, 1 : m - 1] = F.T[1 : m - 1, 1 : m - 1]
       MA[1 : m - 1, 1 : m - 1] = F.S[1 : m - 1, 1 : m - 1]
 
@@ -167,9 +170,9 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
       m = min_dimension
 
       # Shrink V, W, AV, and update M and MA.
-      V[:, 1 : m] = V[:, 1 : max_dimension] * F[:right][:, 1 : m]
-      W[:, 1 : m] = W[:, 1 : max_dimension] * F[:left][:, 1 : m]
-      AV[:, 1 : m] = AV[:, 1 : max_dimension] * F[:right][:, 1 : m]
+      V[:, 1 : m] = @view(V[:, 1 : max_dimension]) * @view(F[:right][:, 1 : m])
+      W[:, 1 : m] = @view(W[:, 1 : max_dimension]) * @view(F[:left][:, 1 : m])
+      AV[:, 1 : m] = @view(AV[:, 1 : max_dimension]) * @view(F[:right][:, 1 : m])
       M[1 : m, 1 : m] = F.T[1 : m, 1 : m]
       MA[1 : m, 1 : m] = F.S[1 : m, 1 : m]
     end

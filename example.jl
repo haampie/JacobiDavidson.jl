@@ -91,7 +91,7 @@ function test_harmonic(; n = 1000, τ = 10.5)
 
   Q, R, ritz_hist, conv_hist, residuals = harmonic_ritz_test(
     A,
-    gmres_solver(iterations = 15),
+    gmres_solver(iterations = 20),
     pairs = 10,
     min_dimension = 10,
     max_dimension = 20,
@@ -110,7 +110,7 @@ function test_harmonic(; n = 1000, τ = 10.5)
   p = plot([τ, τ], [0.0, iterations + 1.0], linewidth=5, legend = :none, layout = (2, 1))
 
   # Plot the actual eigenvalues
-  scatter!(λs, fill(iterations + 1, n), xlabel = "Real line", ylabel = "Iteration", yticks = 0 : 5 : iterations, xlims = (minimum(λs) - 2.0, maximum(λs) + 2.0), marker = (:diamond, :black), subplot = 1)
+  scatter!(λs, fill(iterations + 1, n), xlabel = "Real line", ylabel = "Iteration", xlims = (minimum(λs) - 2.0, maximum(λs) + 2.0), marker = (:diamond, :black), subplot = 1)
   
   # Plot the approximate eigenvalues per iteration
   for (k, (ritzvalues, eigenvalues)) = enumerate(zip(ritz_hist, conv_hist))
