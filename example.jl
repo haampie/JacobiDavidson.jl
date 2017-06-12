@@ -8,6 +8,7 @@ using JacobiDavidson:
   exact_solver,
   gmres_solver,
   jacobi_davidson_hermetian,
+  jdqr_harmonic_simpler,
   jdqr_harmonic,
   LM, SM, Near
 
@@ -40,7 +41,7 @@ function test_harmonic(; n = 100, τ = 2.0 + 0.01im)
 
   λs = real(eigvals(full(A)))
 
-  Q, R, ritz_hist, conv_hist, residuals = jdqr_harmonic(
+  Q, R, ritz_hist, conv_hist, residuals = jdqr_harmonic_simpler(
     A,
     gmres_solver(iterations = 5),
     pairs = 10,
