@@ -1,4 +1,4 @@
-function harmonic_ritz_test{Alg <: CorrectionSolver}(
+function jdqr_harmonic{Alg <: CorrectionSolver}(
   A,                       # Some square Hermetian matrix
   solver::Alg;             # Solver for the correction equation
   pairs::Int = 5,          # Number of eigenpairs wanted
@@ -108,13 +108,11 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
     M[m + 1, m + 1] = dot(W[:, m + 1], V[:, m + 1])
 
     # Assert orthogonality of V and W
+    # Assert W * MA = (I - QQ') * (A - τI) * V
+    # Assert that M = W' * V
     @assert norm(W[:, 1 : m + 1]' * W[:, 1 : m + 1] - eye(m + 1)) < 1e-12
     @assert norm(V[:, 1 : m + 1]' * V[:, 1 : m + 1] - eye(m + 1)) < 1e-12
-
-    # Assert W * MA = (I - QQ') * (A - τI) * V
     @assert norm(W[:, 1 : m + 1] * MA[1 : m + 1, 1 : m + 1] - AV[:, 1 : m + 1] + (Q[:, 1 : k] * (Q[:, 1 : k]' * AV[:, 1 : m + 1]))) < pairs * ɛ
-
-    # Assert that M = W' * V
     @assert norm(M[1 : m + 1, 1 : m + 1] - W[:, 1 : m + 1]' * V[:, 1 : m + 1]) < 1e-12
 
     # Finally increment the search space dimension

@@ -9,45 +9,6 @@ end
 type exact_solver <: CorrectionSolver
 end
 
-function solve_correction{T <: AbstractLinearMap}(solver::gmres_solver, A::T, θ, u::AbstractVector)
-  n = size(A, 1)
-
-  # Define the residual mapping
-  R = LinearMap(x -> A * x - θ * x, nothing, n)
-
-  # Projection Cⁿ → Cⁿ ∖ span {u}: Px = (I - uu')x
-  P = LinearMap(x -> x - dot(u, x) * u, nothing, n; ishermitian = true)
-
-  # Coefficient matrix A - θI restricted map: Cⁿ ∖ span {u} -> Cⁿ ∖ span {u}
-  C = P * R * P
-
-  # Residual
-  r = R * u
-
-  gmres(C, -r, max_iter = solver.iterations, ɛ = solver.tolerance)
-end
-
-function solve_correction{T <: AbstractLinearMap}(solver::exact_solver, A::T, θ, u::AbstractVector)
-  # The exact solver is mostly useful for testing Jacobi-Davidson
-  # method itself and should result in quadratic convergence.
-  # However, in general the correction equation should be solved
-  # only approximately in a fixed number of GMRES / BiCGStab
-  # iterations to reduce computation costs.
-
-  # This method is *not* matrix-free (TODO: assert this or specify solve_correction)
-
-  # Here we solve the augmented system
-  # [A - θI, u; u' 0][t; y] = [-r; 0] for t,
-  # which is equivalent to solving (A - θI) t = -r
-  # for t ⟂ u.
-
-  n = size(A, 1)
-  r = A * u - θ * u
-  Ã = [(A.lmap - θ * speye(n)) u; u' 0]
-  rhs = [-r; 0]
-  (Ã \ rhs)[1 : n]
-end
-
 function solve_deflated_correction(solver::exact_solver, A, θ, X::AbstractMatrix, u::AbstractVector, r::AbstractVector)
   # The exact solver is mostly useful for testing Jacobi-Davidson
   # method itself and should result in quadratic convergence.
