@@ -52,7 +52,7 @@ function book_example()
     pairs = 10,
     min_dimension = 10,
     max_dimension = 40,
-    max_iter = 500,
+    max_iter = 50,
     ɛ = 1e-8,
     target = Near(0.5),
     v0 = v
@@ -85,17 +85,25 @@ function hermetian_example(; n = 200, min = 10, max = 30, )
   X, D, res
 end
 
-function test_harmonic(; n = 1000, τ = 10.5)
-  A = spdiagm((fill(0.5, n - 1), linspace(1.0, n, n), fill(0.5, n - 1)), (-1, 0, 1))
+function test_harmonic(; n = 100, τ = -2.0 + 0.1im)
+  srand(4)
+
+  A = spdiagm(
+    (fill(1.0, n - 1), 
+    fill(-2.0, n), 
+    fill(1.2, n - 1)), 
+    (-1, 0, 1)
+  )
+
   λs = real(eigvals(full(A)))
 
   Q, R, ritz_hist, conv_hist, residuals = harmonic_ritz_test(
     A,
-    gmres_solver(iterations = 20),
+    gmres_solver(iterations = 12),
     pairs = 10,
     min_dimension = 10,
-    max_dimension = 20,
-    max_iter = 3 * n,
+    max_dimension = 15,
+    max_iter = 350,
     ɛ = 1e-8,
     τ = τ
   )
@@ -106,19 +114,21 @@ function test_harmonic(; n = 1000, τ = 10.5)
   # Total number of iterations
   iterations = length(ritz_hist)
 
-  # Plot the target as a vertical line
-  p = plot([τ, τ], [0.0, iterations + 1.0], linewidth=5, legend = :none, layout = (2, 1))
+  @show iterations
+
+  # Plot the target as a horizontal line
+  p = plot([0.0, iterations + 1.0], [real(τ), real(τ)], linewidth=5, legend = :none, layout = (2, 1))
 
   # Plot the actual eigenvalues
-  scatter!(λs, fill(iterations + 1, n), xlabel = "Real line", ylabel = "Iteration", xlims = (minimum(λs) - 2.0, maximum(λs) + 2.0), marker = (:diamond, :black), subplot = 1)
+  scatter!(fill(iterations + 1, n), λs, xlabel = "Iteration", ylims = (minimum(λs) - 2.0, maximum(λs) + 2.0), marker = (:diamond, :black), subplot = 1)
   
   # Plot the approximate eigenvalues per iteration
   for (k, (ritzvalues, eigenvalues)) = enumerate(zip(ritz_hist, conv_hist))
-    scatter!(real(ritzvalues), k * ones(length(ritzvalues)), marker = (:+, :green), subplot = 1)
-    scatter!(real(eigenvalues), k * ones(length(eigenvalues)), marker = (:hexagon, :yellow), subplot = 1)
+    # scatter!(k * ones(length(ritzvalues)), real(ritzvalues)', marker = (:+, :green), subplot = 1)
+    # scatter!(k * ones(length(eigenvalues)), real(eigenvalues)', marker = (:hexagon, :yellow), subplot = 1)
   end
 
-  plot!(residuals, xlabel = "Iteration", label = "Residual", yaxis = :log10, subplot = 2)
+  plot!(residuals, xlabel = "Iteration", label = "Residual", xticks = 0.0 : 50.0 : 350.0, yaxis = :log10, subplot = 2)
 
   p
 end

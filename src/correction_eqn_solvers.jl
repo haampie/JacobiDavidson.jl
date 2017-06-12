@@ -85,32 +85,7 @@ function solve_deflated_correction(solver::gmres_solver, A, θ, X::AbstractMatri
   # Coefficient matrix A - θI restricted map: Cⁿ ∖ span {Q} -> Cⁿ ∖ span {Q}
   C = P1 * P2 * R
 
-  gmres(C, -r, max_iter = solver.iterations, ɛ = solver.tolerance)
-end
+  x, _ = gmres(C, -r, outer = 1, restart = solver.iterations, tol = solver.tolerance * norm(r))
 
-function gmres{T <: AbstractLinearMap}(A::T, b::AbstractVector; max_iter::Int = 5, ɛ::Float64 = 1e-6)
-  # This is a poor man's impl. of GMRES, but it will be replaced by
-  # a solver from IterativeSolvers.jl anyway; although a minimalist version could be faster.
-  # Zero initial guess ensures the Krylov subspace is orthogonal to the approximate eigenvector.
-
-  n = size(A, 1)
-  β = norm(b)
-  V = zeros(Complex{Float64}, n, max_iter + 1)
-  H = zeros(Complex{Float64}, max_iter + 1, max_iter)
-  V[:, 1] = b / complex(β)
-
-  # Create a Krylov subspace of dimension max_iter
-  for k = 1 : max_iter
-    # Add the (k + 1)th basis vector
-    V[:, k + 1] = A * V[:, k]
-    expand!(V, H, k)
-  end
-
-  # Solve the low-dimensional problem
-  e₁ = zeros(max_iter + 1)
-  e₁[1] = β
-  y = H \ e₁
-
-  # Project back to the large dimensional solution
-  V[:, 1 : max_iter] * y
+  x
 end

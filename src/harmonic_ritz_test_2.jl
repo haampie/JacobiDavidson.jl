@@ -5,7 +5,7 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
   max_dimension::Int = 20, # Maximal search space size
   min_dimension::Int = 10, # Minimal search space size
   max_iter::Int = 200,
-  τ::Complex128 = 40.0 + 0im,       # Search target
+  τ::Float64 = 40.0,       # Search target
   ɛ::Float64 = 1e-7       # Maximum residual norm
 )
 
@@ -57,11 +57,6 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
     for i = 1 : m
       V[:, m + 1] -= dot(V[:, i], V[:, m + 1]) * V[:, i]
     end
-
-    # Reorthogonalize
-    for i = 1 : m
-      V[:, m + 1] -= dot(V[:, i], V[:, m + 1]) * V[:, i]
-    end
     
     # Normalize
     V[:, m + 1] /= norm(V[:, m + 1])
@@ -76,28 +71,22 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
     for i = 1 : k
       W[:, m + 1] -= dot(Q[:, i], W[:, m + 1]) * Q[:, i]
     end
-
-    # Reorthogonalize
-    for i = 1 : k
-      W[:, m + 1] -= dot(Q[:, i], W[:, m + 1]) * Q[:, i]
-    end
+    # orthogonalize_to_columns!(@view(W[:, m + 1]), @view(Q[:, 1 : k]))
 
     # Orthogonalize W[:, m + 1] w.r.t. previous columns of W
+    # orthonormalize_and_store_factors!(@view(W[:, m + 1]), @view(W[:, 1 : m]), @view(MA[1 : m + 1, m + 1]))
     for i = 1 : m
       MA[i, m + 1] = dot(W[:, i], W[:, m + 1])
       W[:, m + 1] -= MA[i, m + 1] * W[:, i]
     end
-
-    # Reorthogonalize
-    for i = 1 : m
-      increment = dot(W[:, i], W[:, m + 1])
-      MA[i, m + 1] += increment
-      W[:, m + 1] -= increment * W[:, i]
-    end
-
-    # Normalize
     MA[m + 1, m + 1] = norm(W[:, m + 1])
     W[:, m + 1] /= MA[m + 1, m + 1]
+
+    # Assert orthogonality of W
+    @assert norm(W[:, 1 : m + 1]' * W[:, 1 : m + 1] - eye(m + 1)) < 1e-12
+
+    # Assert MA = W' * (A - τI) * V
+    @assert norm(W[:, 1 : m]' * AV[:, 1 : m] - MA[1 : m, 1 : m]) < 1e-10
 
     # Update M
     for i = 1 : m
@@ -105,13 +94,6 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
       M[m + 1, i] = dot(W[:, m + 1], V[:, i])
     end
     M[m + 1, m + 1] = dot(W[:, m + 1], V[:, m + 1])
-
-    # Assert orthogonality of V and W
-    @assert norm(W[:, 1 : m + 1]' * W[:, 1 : m + 1] - eye(m + 1)) < 1e-12
-    @assert norm(V[:, 1 : m + 1]' * V[:, 1 : m + 1] - eye(m + 1)) < 1e-12
-
-    # Assert W * MA = (I - QQ') * (A - τI) * V
-    @assert norm(W[:, 1 : m + 1] * MA[1 : m + 1, 1 : m + 1] - AV[:, 1 : m + 1] + (Q[:, 1 : k] * (Q[:, 1 : k]' * AV[:, 1 : m + 1]))) < pairs * ɛ
 
     # Assert that M = W' * V
     @assert norm(M[1 : m + 1, 1 : m + 1] - W[:, 1 : m + 1]' * V[:, 1 : m + 1]) < 1e-12
@@ -125,7 +107,7 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
     # r is its residual with Schur directions removed
     # z is the projection of the residual on Q
 
-    F, u, rayleigh, r, z = extract(MA, M, V, AV, Q, m, k, ɛ)
+    F, u, rayleigh, r, z = extract(MA, M, V, AV, Q, m, k)
 
     # Convergence history of the harmonic Ritz values
     push!(harmonic_ritz_values, τ + F[:alpha] ./ F[:beta])
@@ -134,18 +116,17 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
 
     # An Ritz vector is converged
     while norm(r) ≤ ɛ
-      println("Found an eigenvalue", rayleigh + τ)
+      println("Found an eigenvalue")
 
       R[k + 1, k + 1] = rayleigh + τ # Eigenvalue
-      R[k + 1, 1 : k] = z            # Makes AQ = QR
+      R[k + 1, 1 : k] = z            # Makes A = QR
       Q[:, k + 1] = u
       k += 1
 
       # Add another one in the history
       push!(converged_ritz_values[iter], rayleigh + τ)
 
-      # Make sure the Schur decomp AQ = QR is approximately correct
-      @assert norm(A * @view(Q[:, k]) - @view(Q[:, 1 : k]) * @view(R[k, 1 : k])) < k * ɛ
+      @assert norm(A * @view(Q[:, 1 : k]) - @view(Q[:, 1 : k]) * @view(R[1 : k, 1 : k])) < pairs * ɛ
 
       # Are we done yet?
       if k == pairs
@@ -154,13 +135,17 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
 
       # Now remove this eigenvector direction from the search space.
 
-      # Shrink V, W and AV and update M and MA.
-      V[:, 1 : m - 1] = @view(V[:, 1 : m]) * @view(F[:right][:, 2 : m])
-      W[:, 1 : m - 1] = @view(W[:, 1 : m]) * @view(F[:left][:, 2 : m])
-      AV[:, 1 : m - 1] = @view(AV[:, 1 : m]) * @view(F[:right][:, 2 : m])
+      # Move it to the back in the Schur decomp
+      p = trues(m)
+      p[1] = false
+      ordschur!(F, p)
 
-      M[1 : m - 1, 1 : m - 1] = F.T[2 : m, 2 : m]
-      MA[1 : m - 1, 1 : m - 1] = F.S[2 : m, 2 : m]
+      # Shrink V, W and AV and update M and MA.
+      V[:, 1 : m - 1] = @view(V[:, 1 : m]) * @view(F[:right][:, 1 : m - 1])
+      W[:, 1 : m - 1] = @view(W[:, 1 : m]) * @view(F[:left][:, 1 : m - 1])
+      AV[:, 1 : m - 1] = @view(AV[:, 1 : m]) * @view(F[:right][:, 1 : m - 1])
+      M[1 : m - 1, 1 : m - 1] = F.T[1 : m - 1, 1 : m - 1]
+      MA[1 : m - 1, 1 : m - 1] = F.S[1 : m - 1, 1 : m - 1]
 
       m -= 1
 
@@ -169,7 +154,7 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
         return Q[:, 1 : k], R[1 : k, 1 : k], harmonic_ritz_values, converged_ritz_values, residuals
       end
 
-      F, u, rayleigh, r, z = extract(MA, M, V, AV, Q, m, k, ɛ)
+      F, u, rayleigh, r, z = extract(MA, M, V, AV, Q, m, k)
     end
 
     if m == max_dimension
@@ -198,7 +183,7 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
 
 end
 
-function extract(MA, M, V, AV, Q, m, k, ɛ)
+function extract(MA, M, V, AV, Q, m, k)
   # Compute the Schur decomp to find the harmonic Ritz values
   F = schurfact(@view(MA[1 : m, 1 : m]), @view(M[1 : m, 1 : m]))
 
@@ -218,26 +203,38 @@ function extract(MA, M, V, AV, Q, m, k, ɛ)
   rayleigh = conj(F.beta[1]) * F.alpha[1]
   
   # Residual r_tilde = (A-τI)u - rayleigh * u = AV*y - rayleigh * u
-  r = @view(AV[:, 1 : m]) * y - rayleigh * u
-  
-  # Orthogonalize w.r.t. Q
-  z = zeros(Complex128, k)
-  for i = 1 : k
-    z[i] = dot(Q[:, i], r)
-    r -= z[i] * Q[:, i]
-  end
-
-  # Repeat
-  for i = 1 : k
-    increment = dot(Q[:, i], r)
-    z[i] += increment
-    r -= increment * Q[:, i]
-  end
+  r_tilde = @view(AV[:, 1 : m]) * y - rayleigh * u
   
   # Assert that the residual is perpendicular to the Ritz vector
-  @assert abs(dot(r, u)) < ɛ
+  @assert abs(dot(r_tilde, u)) < 1e-10
 
-  @show norm(r)
+  z = @view(Q[:, 1 : k])' * r_tilde
+
+  # r = (I - QQ')r_tilde (directions in converged Schur vectors removed.)
+  r = r_tilde - @view(Q[:, 1 : k]) * z
 
   F, u, rayleigh, r, z
 end
+
+function orthogonalize_to_columns!(v, W)
+  # Modified Gram-Schmidt
+  for i = 1 : size(W, 2)
+    vec = @view(W[:, i])
+    v .-= dot(v, vec) * vec
+  end
+end
+
+function orthonormalize_and_store_factors!(v, W, factors)
+  # Modified Gram-Schmidt
+  k = size(W, 2)
+  
+  for i = 1 : k
+    vec = @view(W[:, i])
+    factors[i] = dot(v, vec)
+    v .-= factors[i] * vec
+  end
+
+  factors[k + 1] = norm(v)
+  v ./= factors[k + 1]
+end
+
