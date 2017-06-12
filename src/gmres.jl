@@ -1,42 +1,37 @@
 using Base.LinAlg.axpy!
 
-function gmres(A, b; outer::Int = 5, restart::Int = 20, tol = sqrt(eps(real(eltype(b)))))
+function gmres(A, b; max_iter::Int = 20, tol = sqrt(eps(real(eltype(b)))))
   T = eltype(b)
 
   # Approximate solution
   x = zeros(T, size(A, 1))
-  arnoldi = ArnoldiDecomp(A, restart, T)
-  residual = Residual(restart, T)
+  arnoldi = ArnoldiDecomp(A, max_iter, T)
+  residual = Residual(max_iter, T)
+  relres::Vector{real(T)} = [one(T)]
  
-  for restarts = 1 : outer
-    if residual.current ≤ tol
-      break
-    end
+  # Set the first basis vector
+  β::real(T) = init!(arnoldi, x, b)
 
-    # Set the first basis vector
-    β::real(T) = init!(arnoldi, x, b)
+  # And initialize the residual
+  init_residual!(residual)
 
-    # And initialize the residual
-    init_residual!(residual, β)
+  k = 1
+  
+  while k ≤ max_iter && residual.current > tol
 
-    # Inner iterations k = 1, ..., restart
-    k = 1
-    
-    while k ≤ restart && residual.current > tol
+    # Arnoldi step: expand and orthogonalize
+    expand!(arnoldi, k)
+    orthogonalize!(arnoldi, k)
+    update_residual!(residual, arnoldi, k)
+    push!(relres, residual.current)
 
-      # Arnoldi step: expand and orthogonalize
-      expand!(arnoldi, k)
-      orthogonalize!(arnoldi, k)
-      update_residual!(residual, arnoldi, k)
-
-      k += 1
-    end
-
-    # Solve the projected problem Hy = β * e1 in the least-squares sense.
-    extract!(x, arnoldi, β, k)
+    k += 1
   end
 
-  return x, residual.history
+  # Solve the projected problem Hy = β * e1 in the least-squares sense.
+  extract!(x, arnoldi, β, k)
+
+  return x, relres
 end
 
 type ArnoldiDecomp{T}
@@ -52,27 +47,22 @@ ArnoldiDecomp(A, order::Int, T::Type) = ArnoldiDecomp{T}(
 )
 
 type Residual{numT, resT}
-  history::Vector{resT} # Residual per iteration
   current::resT # Current relative residual
   accumulator::resT # Used to compute the residual on the go
   nullvec::Vector{numT} # Vector in the null space to compute residuals
-  β::resT # the initial residual
 end
 
 Residual(order, T::Type) = Residual{T, real(T)}(
-  real(T)[],
   one(real(T)),
   one(real(T)),
-  ones(T, order + 1),
-  one(real(T))
+  ones(T, order + 1)
 )
 
-function update_residual!(r::Residual, arnoldi::ArnoldiDecomp, k::Int)
+function update_residual!{numT, resT}(r::Residual{numT, resT}, arnoldi::ArnoldiDecomp, k::Int)
   # Cheaply computes the current residual
   r.nullvec[k + 1] = -conj(dot(r.nullvec[1 : k], @view(arnoldi.H[1 : k, k])) / arnoldi.H[k + 1, k])
   r.accumulator += abs2(r.nullvec[k + 1])
-  r.current = r.β / √r.accumulator
-  push!(r.history, r.current)
+  r.current = one(resT) / √r.accumulator
 end
 
 function init!{T}(arnoldi::ArnoldiDecomp{T}, x, b)
@@ -86,9 +76,8 @@ function init!{T}(arnoldi::ArnoldiDecomp{T}, x, b)
   β
 end
 
-@inline function init_residual!{numT, resT}(r::Residual{numT, resT}, β)
+@inline function init_residual!{numT, resT}(r::Residual{numT, resT})
   r.accumulator = one(resT)
-  r.β = β
 end
 
 function extract!{T}(x, arnoldi::ArnoldiDecomp{T}, β, k::Int)
@@ -113,6 +102,13 @@ function orthogonalize!{T}(arnoldi::ArnoldiDecomp{T}, k::Int)
   for j = 1 : k
     arnoldi.H[j, k] = dot(arnoldi.V[j], arnoldi.V[k + 1])
     axpy!(-arnoldi.H[j, k], arnoldi.V[j], arnoldi.V[k + 1])
+  end
+
+  # Reorthogonalize
+  for j = 1 : k
+    increment = dot(arnoldi.V[j], arnoldi.V[k + 1])
+    arnoldi.H[j, k] += increment
+    axpy!(-increment, arnoldi.V[j], arnoldi.V[k + 1])
   end
 
   arnoldi.H[k + 1, k] = norm(arnoldi.V[k + 1])

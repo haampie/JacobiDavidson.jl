@@ -6,25 +6,26 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
   min_dimension::Int = 10, # Minimal search space size
   max_iter::Int = 200,
   τ::Complex128 = 40.0 + 0im,       # Search target
-  ɛ::Float64 = 1e-7       # Maximum residual norm
+  ɛ::Float64 = 1e-7,       # Maximum residual norm
+  T::Type = Complex128
 )
 
-  residuals::Vector{Float64} = []
+  residuals::Vector{real(T)} = []
 
   n = size(A, 1)
 
   # V's vectors span the search space
-  V = zeros(Complex128, n, max_dimension)
+  V = zeros(T, n, max_dimension)
 
   # AV will store (A - tI) * V, without any orthogonalization
-  AV = zeros(Complex128, n, max_dimension)
+  AV = zeros(T, n, max_dimension)
 
   # W will hold AV, but with its columns orthogonal: AV = W * MA
-  W = zeros(Complex128, n, max_dimension)
+  W = zeros(T, n, max_dimension)
 
   # Projected matrices
-  MA = zeros(Complex128, max_dimension, max_dimension)
-  M = zeros(Complex128, max_dimension, max_dimension)
+  MA = zeros(T, max_dimension, max_dimension)
+  M = zeros(T, max_dimension, max_dimension)
 
   # k is the number of converged eigenpairs
   k = 0
@@ -33,15 +34,15 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
   m = 0
 
   # Q holds the converged eigenvectors as Schur vectors
-  Q = zeros(Complex128, n, pairs)
+  Q = zeros(T, n, pairs)
 
   # R is upper triangular and has the converged eigenvalues on the diagonal
-  R = zeros(Complex128, pairs, pairs)
+  R = zeros(T, pairs, pairs)
 
   iter = 1
 
-  harmonic_ritz_values::Vector{Vector{Complex128}} = []
-  converged_ritz_values::Vector{Vector{Complex128}} = []
+  harmonic_ritz_values::Vector{Vector{T}} = []
+  converged_ritz_values::Vector{Vector{T}} = []
 
   while k <= pairs && iter <= max_iter
     if iter == 1
@@ -125,7 +126,7 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
     # r is its residual with Schur directions removed
     # z is the projection of the residual on Q
 
-    F, u, rayleigh, r, z = extract(MA, M, V, AV, Q, m, k, ɛ)
+    F, u, rayleigh, r, z = extract(MA, M, V, AV, Q, m, k, ɛ, T)
 
     # Convergence history of the harmonic Ritz values
     push!(harmonic_ritz_values, τ + F[:alpha] ./ F[:beta])
@@ -169,7 +170,7 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
         return Q[:, 1 : k], R[1 : k, 1 : k], harmonic_ritz_values, converged_ritz_values, residuals
       end
 
-      F, u, rayleigh, r, z = extract(MA, M, V, AV, Q, m, k, ɛ)
+      F, u, rayleigh, r, z = extract(MA, M, V, AV, Q, m, k, ɛ, T)
     end
 
     if m == max_dimension
@@ -189,6 +190,7 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
       AV[:, 1 : m] = @view(AV[:, 1 : max_dimension]) * @view(F[:right][:, 1 : m])
       M[1 : m, 1 : m] = F.T[1 : m, 1 : m]
       MA[1 : m, 1 : m] = F.S[1 : m, 1 : m]
+
     end
 
     iter += 1
@@ -198,7 +200,7 @@ function harmonic_ritz_test{Alg <: CorrectionSolver}(
 
 end
 
-function extract(MA, M, V, AV, Q, m, k, ɛ)
+function extract(MA, M, V, AV, Q, m, k, ɛ, T)
   # Compute the Schur decomp to find the harmonic Ritz values
   F = schurfact(@view(MA[1 : m, 1 : m]), @view(M[1 : m, 1 : m]))
 
@@ -221,7 +223,7 @@ function extract(MA, M, V, AV, Q, m, k, ɛ)
   r = @view(AV[:, 1 : m]) * y - rayleigh * u
   
   # Orthogonalize w.r.t. Q
-  z = zeros(Complex128, k)
+  z = zeros(T, k)
   for i = 1 : k
     z[i] = dot(Q[:, i], r)
     r -= z[i] * Q[:, i]

@@ -83,9 +83,9 @@ function solve_deflated_correction(solver::gmres_solver, A, θ, X::AbstractMatri
   P2 = LinearMap(x -> x - X * (X' * x), nothing, n; ishermitian = true)
 
   # Coefficient matrix A - θI restricted map: Cⁿ ∖ span {Q} -> Cⁿ ∖ span {Q}
-  C = P1 * P2 * R
+  C = P2 * P1 * R
 
-  x, _ = gmres(C, -r, outer = 1, restart = solver.iterations, tol = solver.tolerance * norm(r))
+  x, _ = gmres(C, -r, max_iter = solver.iterations, tol = solver.tolerance)
 
   x
 end
