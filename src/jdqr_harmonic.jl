@@ -124,7 +124,7 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
     # r is its residual with Schur directions removed
     # z is the projection of the residual on Q
 
-    F, u, rayleigh, r, z = extract(MA, M, V, AV, Q, m, k, ɛ, T)
+    F, u, rayleigh, r, z = extract!(MA, M, V, AV, Q, m, k, ɛ, T)
 
     # Convergence history of the harmonic Ritz values
     push!(harmonic_ritz_values, τ + F[:alpha] ./ F[:beta])
@@ -168,7 +168,7 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
         return Q[:, 1 : k], R[1 : k, 1 : k], harmonic_ritz_values, converged_ritz_values, residuals
       end
 
-      F, u, rayleigh, r, z = extract(MA, M, V, AV, Q, m, k, ɛ, T)
+      F, u, rayleigh, r, z = extract!(MA, M, V, AV, Q, m, k, ɛ, T)
     end
 
     if m == max_dimension
@@ -198,7 +198,7 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
 
 end
 
-function extract(MA, M, V, AV, Q, m, k, ɛ, T)
+function extract!(MA, M, V, AV, Q, m, k, ɛ, T)
   # Compute the Schur decomp to find the harmonic Ritz values
   F = schurfact(@view(MA[1 : m, 1 : m]), @view(M[1 : m, 1 : m]))
 
