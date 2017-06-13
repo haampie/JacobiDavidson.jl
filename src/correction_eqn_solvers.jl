@@ -1,4 +1,4 @@
-abstract CorrectionSolver
+abstract type CorrectionSolver end
 
 type gmres_solver <: CorrectionSolver
   iterations::Int
@@ -46,7 +46,5 @@ function solve_deflated_correction(solver::gmres_solver, A, θ, X::AbstractMatri
   # Coefficient matrix A - θI restricted map: Cⁿ ∖ span {Q} -> Cⁿ ∖ span {Q}
   C = P2 * P1 * R
 
-  x, _ = gmres(C, -r, max_iter = solver.iterations, tol = solver.tolerance)
-
-  x
+  gmres(C, -r, max_iter = solver.iterations, tol = solver.tolerance)
 end

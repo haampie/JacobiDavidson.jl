@@ -8,7 +8,7 @@ using JacobiDavidson:
   exact_solver,
   gmres_solver,
   jacobi_davidson_hermetian,
-  jdqr_harmonic_simpler,
+  jdqr_harmonic_efficient,
   jdqr_harmonic,
   LM, SM, Near
 
@@ -41,7 +41,19 @@ function test_harmonic(; n = 100, τ = 2.0 + 0.01im)
 
   λs = real(eigvals(full(A)))
 
-  Q, R, ritz_hist, conv_hist, residuals = jdqr_harmonic_simpler(
+  # Q, R, ritz_hist, conv_hist, residuals = jdqr_harmonic_simpler(
+  #   A,
+  #   gmres_solver(iterations = 5),
+  #   pairs = 10,
+  #   min_dimension = 10,
+  #   max_dimension = 15,
+  #   max_iter = 300,
+  #   ɛ = 1e-8,
+  #   τ = τ
+  # )
+  srand(4)
+
+  Q1, R1, harmonic_ritz_values1, converged_ritz_values1, residuals1 = jdqr_harmonic_efficient(
     A,
     gmres_solver(iterations = 5),
     pairs = 10,
@@ -51,6 +63,24 @@ function test_harmonic(; n = 100, τ = 2.0 + 0.01im)
     ɛ = 1e-8,
     τ = τ
   )
+
+  srand(4)
+
+  Q2, R2, harmonic_ritz_values2, converged_ritz_values2, residuals2 = jdqr_harmonic(
+    A,
+    gmres_solver(iterations = 5),
+    pairs = 10,
+    min_dimension = 10,
+    max_dimension = 15,
+    max_iter = 300,
+    ɛ = 1e-8,
+    τ = τ
+  )
+
+  p = plot(residuals1, yscale = :log10, label = "new")
+  plot!(residuals2, yscale = :log10, label = "old")
+
+  return p
 
   # Converged eigenvalues.
   @show diag(R)

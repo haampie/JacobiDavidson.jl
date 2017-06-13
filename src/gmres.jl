@@ -7,7 +7,7 @@ function gmres(A, b; max_iter::Int = 20, tol = sqrt(eps(real(eltype(b)))))
   x = zeros(T, size(A, 1))
   arnoldi = ArnoldiDecomp(A, max_iter, T)
   residual = Residual(max_iter, T)
-  relres::Vector{real(T)} = [one(T)]
+  # relres::Vector{real(T)} = [one(T)]
  
   # Set the first basis vector
   β::real(T) = init!(arnoldi, x, b)
@@ -23,7 +23,7 @@ function gmres(A, b; max_iter::Int = 20, tol = sqrt(eps(real(eltype(b)))))
     expand!(arnoldi, k)
     orthogonalize!(arnoldi, k)
     update_residual!(residual, arnoldi, k)
-    push!(relres, residual.current)
+    # push!(relres, residual.current)
 
     k += 1
   end
@@ -31,7 +31,7 @@ function gmres(A, b; max_iter::Int = 20, tol = sqrt(eps(real(eltype(b)))))
   # Solve the projected problem Hy = β * e1 in the least-squares sense.
   extract!(x, arnoldi, β, k)
 
-  return x, relres
+  return x
 end
 
 type ArnoldiDecomp{T}

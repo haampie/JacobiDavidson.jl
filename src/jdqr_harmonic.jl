@@ -47,7 +47,7 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
   while k <= pairs && iter <= max_iter
     if iter == 1
       V[:, m + 1] = rand(n) # Initialize with a random vector
-    elseif iter < 5
+    elseif iter < 3
       V[:, m + 1] = r # Expand with the residual ~ Arnoldi style
     else
       V[:, m + 1] = solve_deflated_correction(solver, A, rayleigh + τ, @view(Q[:, 1 : k]), u, r)
@@ -110,10 +110,10 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
     # Assert orthogonality of V and W
     # Assert W * MA = (I - QQ') * (A - τI) * V
     # Assert that M = W' * V
-    @assert norm(W[:, 1 : m + 1]' * W[:, 1 : m + 1] - eye(m + 1)) < 1e-12
-    @assert norm(V[:, 1 : m + 1]' * V[:, 1 : m + 1] - eye(m + 1)) < 1e-12
-    @assert norm(W[:, 1 : m + 1] * MA[1 : m + 1, 1 : m + 1] - AV[:, 1 : m + 1] + (Q[:, 1 : k] * (Q[:, 1 : k]' * AV[:, 1 : m + 1]))) < pairs * ɛ
-    @assert norm(M[1 : m + 1, 1 : m + 1] - W[:, 1 : m + 1]' * V[:, 1 : m + 1]) < 1e-12
+    # @assert norm(W[:, 1 : m + 1]' * W[:, 1 : m + 1] - eye(m + 1)) < 1e-12
+    # @assert norm(V[:, 1 : m + 1]' * V[:, 1 : m + 1] - eye(m + 1)) < 1e-12
+    # @assert norm(W[:, 1 : m + 1] * MA[1 : m + 1, 1 : m + 1] - AV[:, 1 : m + 1] + (Q[:, 1 : k] * (Q[:, 1 : k]' * AV[:, 1 : m + 1]))) < pairs * ɛ
+    # @assert norm(M[1 : m + 1, 1 : m + 1] - W[:, 1 : m + 1]' * V[:, 1 : m + 1]) < 1e-12
 
     # Finally increment the search space dimension
     m += 1
@@ -133,7 +133,7 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
 
     # An Ritz vector is converged
     while norm(r) ≤ ɛ
-      println("Found an eigenvalue", rayleigh + τ)
+      # println("Found an eigenvalue", rayleigh + τ)
 
       R[k + 1, k + 1] = rayleigh + τ # Eigenvalue
       R[k + 1, 1 : k] = z            # Makes AQ = QR
@@ -144,7 +144,7 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
       push!(converged_ritz_values[iter], rayleigh + τ)
 
       # Make sure the Schur decomp AQ = QR is approximately correct
-      @assert norm(A * @view(Q[:, k]) - @view(Q[:, 1 : k]) * @view(R[k, 1 : k])) < k * ɛ
+      # @assert norm(A * @view(Q[:, k]) - @view(Q[:, 1 : k]) * @view(R[k, 1 : k])) < k * ɛ
 
       # Are we done yet?
       if k == pairs
@@ -172,7 +172,7 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
     end
 
     if m == max_dimension
-      println("Shrinking the search space.")
+      # println("Shrinking the search space.")
 
       # Move min_dimension of the smallest harmonic Ritz values up front
       smallest = selectperm(abs(F[:alpha] ./ F[:beta]), 1 : min_dimension)
@@ -188,7 +188,6 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
       AV[:, 1 : m] = @view(AV[:, 1 : max_dimension]) * @view(F[:right][:, 1 : m])
       M[1 : m, 1 : m] = F.T[1 : m, 1 : m]
       MA[1 : m, 1 : m] = F.S[1 : m, 1 : m]
-
     end
 
     iter += 1
@@ -235,9 +234,7 @@ function extract!(MA, M, V, AV, Q, m, k, ɛ, T)
   end
   
   # Assert that the residual is perpendicular to the Ritz vector
-  @assert abs(dot(r, u)) < ɛ
-
-  @show norm(r)
+  # @assert abs(dot(r, u)) < ɛ
 
   F, u, rayleigh, r, z
 end

@@ -1,11 +1,11 @@
-function jdqr_harmonic_simpler{Alg <: CorrectionSolver}(
+function jdqr_harmonic_efficient{Alg <: CorrectionSolver}(
   A,                       # Some square Hermetian matrix
   solver::Alg;             # Solver for the correction equation
   pairs::Int = 5,          # Number of eigenpairs wanted
   max_dimension::Int = 20, # Maximal search space size
   min_dimension::Int = 10, # Minimal search space size
   max_iter::Int = 200,
-  τ::Complex128 = 40.0 + 0im,       # Search target
+  τ::Complex128 = 0.0 + 0im,       # Search target
   ɛ::Float64 = 1e-7,       # Maximum residual norm
   T::Type = Complex128
 )
@@ -52,47 +52,49 @@ function jdqr_harmonic_simpler{Alg <: CorrectionSolver}(
   while k <= pairs && iter <= max_iter
     if iter == 1
       V[m + 1] = rand(n) # Initialize with a random vector
-    elseif iter < 5
+    elseif iter < 3
       V[m + 1] = r # Expand with the residual ~ Arnoldi style
     else
       V[m + 1] = solve_deflated_correction(solver, A, rayleigh + τ, @view(Q[:, 1 : k]), u, r)
     end
 
+    m += 1
+
     # Search space is orthonormalized
-    orthogonalize!(V[1 : m], V[m + 1])
-    scale!(V[m + 1], one(T) / norm(V[m + 1]))
+    orthogonalize!(V[1 : m - 1], V[m])
+    scale!(V[m], one(T) / norm(V[m]))
 
     # AV is just the product (A - τI)V
-    AV[m + 1] = A * V[m + 1] - τ * V[m + 1]
+    A_mul_B!(AV[m], A, V[m])
+    axpy!(-τ, V[m], AV[m])
 
     # Expand W with (A - τI)V, and then orthogonalize
-    W[m + 1] = copy(AV[m + 1])
+    W[m] .= AV[m]
 
     # Orthogonalize w.r.t. the converged Schur vectors using Gram-Schmidt
-    orthogonalize!(@view(Q[:, 1 : k]), W[m + 1])
+    orthogonalize!(@view(Q[:, 1 : k]), W[m])
 
-    # Orthonormalize W[:, m + 1] w.r.t. previous columns of W
-    orthogonalize_and_factorize!(W[1 : m], W[m + 1], @view(MA[1 : m, m + 1]))
-    MA[m + 1, m + 1] = norm(W[m + 1])
-    scale!(W[m + 1], one(T) / MA[m + 1, m + 1])
+    # Orthonormalize W[:, m] w.r.t. previous columns of W
+    orthogonalize_and_factorize!(W[1 : m - 1], W[m], @view(MA[1 : m - 1, m]))
+    MA[m, m] = norm(W[m])
+    scale!(W[m], one(T) / MA[m, m])
 
     # Update M
-    M[m + 1, m + 1] = dot(W[m + 1], V[m + 1])
-    for i = 1 : m
-      M[i, m + 1] = dot(W[i], V[m + 1])
-      M[m + 1, i] = dot(W[m + 1], V[i])
+    M[m, m] = dot(W[m], V[m])
+    @inbounds for i = 1 : m - 1
+      M[i, m] = dot(W[i], V[m])
+      M[m, i] = dot(W[m], V[i])
     end
 
     # Assert orthogonality of V and W
     # Assert W * MA = (I - QQ') * (A - τI) * V
     # Assert that M = W' * V
-    # @assert norm(W[:, 1 : m + 1]' * W[:, 1 : m + 1] - eye(m + 1)) < 1e-12
-    # @assert norm(V[:, 1 : m + 1]' * V[:, 1 : m + 1] - eye(m + 1)) < 1e-12
-    # @assert norm(W[:, 1 : m + 1] * MA[1 : m + 1, 1 : m + 1] - AV[:, 1 : m + 1] + (Q[:, 1 : k] * (Q[:, 1 : k]' * AV[:, 1 : m + 1]))) < pairs * ɛ
-    # @assert norm(M[1 : m + 1, 1 : m + 1] - W[:, 1 : m + 1]' * V[:, 1 : m + 1]) < 1e-12
+    # @assert norm(hcat(W[1 : m + 1]...)' * hcat(W[1 : m + 1]...) - eye(m + 1)) < 1e-12
+    # @assert norm(hcat(V[1 : m + 1]...)' * hcat(V[1 : m + 1]...) - eye(m + 1)) < 1e-12
+    # @assert norm(hcat(W[1 : m + 1]...) * MA[1 : m + 1, 1 : m + 1] - hcat(AV[1 : m + 1]...) + (Q[:, 1 : k] * (Q[:, 1 : k]' * hcat(AV[1 : m + 1]...)))) < pairs * ɛ
+    # @assert norm(M[1 : m + 1, 1 : m + 1] - hcat(W[1 : m + 1]...)' * hcat(V[1 : m + 1]...)) < 1e-12
 
     # Finally increment the search space dimension
-    m += 1
 
     # F is the Schur decomp
     # u is the approximate eigenvector
@@ -109,7 +111,7 @@ function jdqr_harmonic_simpler{Alg <: CorrectionSolver}(
 
     # An Ritz vector is converged
     while norm(r) ≤ ɛ
-      println("Found an eigenvalue", rayleigh + τ)
+      # println("Found an eigenvalue", rayleigh + τ)
 
       R[k + 1, k + 1] = rayleigh + τ # Eigenvalue
       R[k + 1, 1 : k] = z            # Makes AQ = QR
@@ -120,7 +122,7 @@ function jdqr_harmonic_simpler{Alg <: CorrectionSolver}(
       push!(converged_ritz_values[iter], rayleigh + τ)
 
       # Make sure the Schur decomp AQ = QR is approximately correct
-      @assert norm(A * @view(Q[:, k]) - @view(Q[:, 1 : k]) * @view(R[k, 1 : k])) < k * ɛ
+      # @assert norm(A * @view(Q[:, k]) - @view(Q[:, 1 : k]) * @view(R[k, 1 : k])) < k * ɛ
 
       # Are we done yet?
       if k == pairs
@@ -130,13 +132,13 @@ function jdqr_harmonic_simpler{Alg <: CorrectionSolver}(
       # Now remove this eigenvector direction from the search space.
 
       # Shrink V, W and AV
-      for i = 1 : m
-        matrix_vector!(V_tmp[i], V, @view(F[:right][i + 1]))
-        matrix_vector!(AV_tmp[i], V, @view(F[:right][i + 1]))
-        matrix_vector!(W_tmp[i], V, @view(F[:left][i + 1]))
+      for i = 1 : m - 1
+        matrix_vector!(V_tmp[i], V[1 : m], @view(F[:right][:, i + 1]))
+        matrix_vector!(AV_tmp[i], AV[1 : m], @view(F[:right][:, i + 1]))
+        matrix_vector!(W_tmp[i], W[1 : m], @view(F[:left][:, i + 1]))
       end
 
-      for i = 1 : m
+      for i = 1 : m - 1
         copy!(V[i], V_tmp[i])
         copy!(AV[i], AV_tmp[i])
         copy!(W[i], W_tmp[i])
@@ -157,7 +159,7 @@ function jdqr_harmonic_simpler{Alg <: CorrectionSolver}(
     end
 
     if m == max_dimension
-      println("Shrinking the search space.")
+      # println("Shrinking the search space.")
 
       # Move min_dimension of the smallest harmonic Ritz values up front
       smallest = selectperm(abs(F[:alpha] ./ F[:beta]), 1 : min_dimension)
@@ -167,9 +169,9 @@ function jdqr_harmonic_simpler{Alg <: CorrectionSolver}(
 
       # Shrink V, W, AV, and update M and MA.
       for i = 1 : min_dimension
-        matrix_vector!(V_tmp[i], V, @view(F[:right][i]))
-        matrix_vector!(AV_tmp[i], V, @view(F[:right][i]))
-        matrix_vector!(W_tmp[i], V, @view(F[:left][i]))
+        matrix_vector!(V_tmp[i], V, @view(F[:right][:, i]))
+        matrix_vector!(AV_tmp[i], AV, @view(F[:right][:, i]))
+        matrix_vector!(W_tmp[i], W, @view(F[:left][:, i]))
       end
 
       for i = 1 : min_dimension
@@ -204,7 +206,8 @@ function extract(MA, M, V, AV, Q, m, k, ɛ, T)
   y = F.Z[:, 1]
 
   # Ritz vector
-  u = matrix_vector(V[1 : m], y)
+  u = hcat(V[1 : m]...) * y
+  # u = matrix_vector(V[1 : m], y)
 
   # Rayleigh quotient = approx eigenvalue s.t. if r = (A-τI)u - rayleigh * u, then r ⟂ u
   rayleigh = conj(F.beta[1]) * F.alpha[1]
@@ -215,14 +218,10 @@ function extract(MA, M, V, AV, Q, m, k, ɛ, T)
   
   # Orthogonalize w.r.t. Q
   z = zeros(T, k)
-  if k > 0
-    orthogonalize_and_factorize!(Q, r, z)
-  end
+  orthogonalize_and_factorize!(@view(Q[:, 1 : k]), r, z)
   
   # Assert that the residual is perpendicular to the Ritz vector
-  @assert abs(dot(r, u)) < ɛ
-
-  @show norm(r)
+  # @assert abs(dot(r, u)) < ɛ
 
   F, u, rayleigh, r, z
 end
@@ -271,7 +270,7 @@ function orthogonalize_and_factorize!(V, target, factors)
   for idx = 1 : size(V, 2)
     column = @view(V[:, idx])
     factors[idx] = dot(column, target)
-    axpy!(-factors, column, target)
+    axpy!(-factors[idx], column, target)
   end
 
   # Reorthogonalize
@@ -283,15 +282,14 @@ function orthogonalize_and_factorize!(V, target, factors)
   end
 end
 
-function matrix_vector!{T}(dest::Vector{T}, V::Vector{Vector{T}}, y::Vector{T})
-  copy!(dest, V[1])
-  scale!(V[1], y[1])
+function matrix_vector!{T}(dest::Vector{T}, V::Vector{Vector{T}}, y)
+  dest .= zeros(dest)
 
-  for idx = 2 : length(V)
+  for idx = 1 : length(V)
     axpy!(y[idx], V[idx], dest)
   end
 
   dest
 end
 
-matrix_vector{T}(V::Vector{Vector{T}}, y::Vector{T}) = matrix_vector!(zeros(V[1]), V, y)
+matrix_vector{T}(V::Vector{Vector{T}}, y) = matrix_vector!(zeros(V[1]), V, y)

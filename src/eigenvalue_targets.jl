@@ -1,6 +1,6 @@
 import Base.LinAlg: Schur
 
-abstract Target
+abstract type Target end
 
 # For finding eigenvalues near a target
 type Near <: Target
