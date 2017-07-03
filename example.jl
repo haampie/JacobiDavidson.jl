@@ -3,14 +3,7 @@ module Tst
 import LinearMaps: LinearMap
 
 using Plots
-
-using JacobiDavidson:
-  exact_solver,
-  gmres_solver,
-  jacobi_davidson_hermetian,
-  jdqr_harmonic_efficient,
-  jdqr_harmonic,
-  LM, SM, Near
+using JacobiDavidson
 
 function hermetian_example(; n = 200, min = 10, max = 30, )
   B = sprand(n, n, .2) + 100.0 * speye(n);
@@ -29,13 +22,13 @@ function hermetian_example(; n = 200, min = 10, max = 30, )
   X, D, res
 end
 
-function test_harmonic(; n = 100, τ = 2.0 + 0.01im)
+function test_harmonic(; n = 1000, τ = 6.0 + 0.0im)
   srand(4)
 
   A = spdiagm(
     (fill(-1.0, n - 1), 
-    fill(2.0, n), 
-    fill(-1.2, n - 1)), 
+    fill(2.0, n),
+    fill(-1.2, n - 1)),
     (-1, 0, 1)
   )
 
@@ -53,27 +46,29 @@ function test_harmonic(; n = 100, τ = 2.0 + 0.01im)
   # )
   srand(4)
 
-  Q1, R1, harmonic_ritz_values1, converged_ritz_values1, residuals1 = jdqr_harmonic_efficient(
+  @time Q1, R1, harmonic_ritz_values1, converged_ritz_values1, residuals1 = jdqr_harmonic_matrix(
     A,
-    gmres_solver(iterations = 5),
+    gmres_solver(iterations = 10),
     pairs = 10,
     min_dimension = 10,
-    max_dimension = 15,
+    max_dimension = 20,
     max_iter = 300,
-    ɛ = 1e-8,
+    ɛ = 1e-5,
     τ = τ
   )
 
+  @show norm(Q1' * Q1)
+
   srand(4)
 
-  Q2, R2, harmonic_ritz_values2, converged_ritz_values2, residuals2 = jdqr_harmonic(
+  @time Q2, R2, harmonic_ritz_values2, converged_ritz_values2, residuals2 = jdqr_harmonic(
     A,
-    gmres_solver(iterations = 5),
+    gmres_solver(iterations = 10),
     pairs = 10,
     min_dimension = 10,
-    max_dimension = 15,
+    max_dimension = 20,
     max_iter = 300,
-    ɛ = 1e-8,
+    ɛ = 1e-5,
     τ = τ
   )
 
