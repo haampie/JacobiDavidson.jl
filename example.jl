@@ -12,18 +12,16 @@ function generalized(; n = 200, min = 10, max = 20)
 
   values = eigvals(full(A), full(B))
 
-  Q, Z, S, T = jdqz(A, B, exact_solver(), τ = 0.3 + 0im)
+  Q, Z, S, T, residuals = jdqz(A, B, exact_solver(), τ = 1.0 + 0im, pairs = 20)
   
   found = diag(S) ./ diag(T)
 
-  # try
-  #   Q, R = jdqz(A, B, exact_solver(), τ = 0.3 + 0im)
-  # catch
-  #   println("error.")  
-  # end
-
-  scatter(real(values), imag(values))
+  p1 = scatter(real(values), imag(values))
   scatter!(real(found), imag(found), marker = :+)
+
+  p2 = plot(residuals, yscale = :log10)
+
+  p1, p2
 end
 
 function hermetian_example(; n = 200, min = 10, max = 30, )
@@ -87,7 +85,7 @@ function test_harmonic(; n = 1000, τ = 6.0 + 0.0im)
     gmres_solver(iterations = 10),
     pairs = 10,
     min_dimension = 10,
-    max_dimension = 20,
+    max_dimension = 50,
     max_iter = 300,
     ɛ = 1e-5,
     τ = τ

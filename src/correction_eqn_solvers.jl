@@ -33,7 +33,6 @@ end
 
 function solve_generalized_correction_equation(solver::exact_solver, A, B, Q, Z, u, p, ζ, η, r)
   n = size(A, 1)
-  @show size(Z), size(p)
   Q = [Q u]
   Z = [Z p]
   m = size(Q, 2)

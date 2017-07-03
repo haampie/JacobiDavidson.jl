@@ -16,6 +16,8 @@ function jdqz{Alg <: CorrectionSolver}(
     m = 0
     n = size(A, 1)
 
+    residuals = real(numT)[]
+
     # Harmonic Petrov values 
     ν = 1 / sqrt(1 + abs2(τ))
     μ = -τ * ν
@@ -54,8 +56,6 @@ function jdqz{Alg <: CorrectionSolver}(
     while k ≤ pairs && iter ≤ max_iter
         if iter == 1
             view(V, :, m + 1) .= rand(n) # Initialize with a random vector
-        elseif iter < 10
-            view(V, :, m + 1) .= r # Expand with the residual ~ Arnoldi style
         else
             view(V, :, m + 1) .= solve_generalized_correction_equation(solver, A, B, view(Q, :, 1 : k), view(Z, :, 1 : k), u, p, ζ, η, r)
         end
@@ -112,8 +112,10 @@ function jdqz{Alg <: CorrectionSolver}(
             τ
         )
 
+        push!(residuals, norm(r))
+
         # Store converged Petrov pairs
-        while norm(r) ≤ ε
+        while norm(r) ≤ ɛ
             println("Found an eigenvalue: ", ζ / η)
 
             # Store the eigenvalue
@@ -133,7 +135,7 @@ function jdqz{Alg <: CorrectionSolver}(
 
             # Was this the last eigenpair?
             if k == pairs
-                return Q, Z, S, T
+                return Q, Z, S, T, residuals
             end
 
             # Remove the eigenvalue from the search subspace.
@@ -168,6 +170,7 @@ function jdqz{Alg <: CorrectionSolver}(
 
         if m == max_dimension
             println("Shrinking the search space.")
+            push!(residuals, NaN)
 
             # Move min_dimension of the smallest harmonic Ritz values up front
             smallest = selectperm(abs.(F.alpha ./ F.beta - τ), 1 : min_dimension)
@@ -179,7 +182,7 @@ function jdqz{Alg <: CorrectionSolver}(
             # Todo: V[:, 1], AV[:, 1], BV[:, 1] and W[:, 1] are already available, no need to recompute
             V[:, 1 : min_dimension] = V * view(F[:right], :, 1 : min_dimension)
             AV[:, 1 : min_dimension] = AV * view(F[:right], :, 1 : min_dimension)
-            BV[:, 1 : min_dimension] = AV * view(F[:right], :, 1 : min_dimension)
+            BV[:, 1 : min_dimension] = BV * view(F[:right], :, 1 : min_dimension)
             W[:, 1 : min_dimension] = W * view(F[:left], :, 1 : min_dimension)
 
             # Shrink the spaces
@@ -193,7 +196,7 @@ function jdqz{Alg <: CorrectionSolver}(
         iter += 1
     end
 
-    return Q[:, 1 : k], Z[:, 1 : k], S[1 : k, 1 : k], T[1 : k, 1 : k]
+    return Q[:, 1 : k], Z[:, 1 : k], S[1 : k, 1 : k], T[1 : k, 1 : k], residuals
 end
 
 function extract_generalized(MA, MB, V, W, AV, BV, Z, τ)
@@ -212,7 +215,7 @@ function extract_generalized(MA, MB, V, W, AV, BV, Z, τ)
     # TODO: don't allocate each time.
     # Petrov vector
     u = V * F[:right][:, 1]
-    p = V * F[:left][:, 1]
+    p = W * F[:left][:, 1]
     Au = AV * F[:right][:, 1]
     Bu = BV * F[:right][:, 1]
 
