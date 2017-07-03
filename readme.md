@@ -13,7 +13,7 @@ Todo:
  - [x] Multiple eigenpairs & locking
  - [x] Implicit restart
  - [x] Convergence history / status
- - [ ] Use harmonic Ritz values rather than Ritz values for better approximations of interior eigenvalues.
+ - [x] Use harmonic Ritz values rather than Ritz values for better approximations of interior eigenvalues.
 
 
 ```julia
