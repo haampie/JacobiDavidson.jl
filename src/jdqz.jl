@@ -10,7 +10,7 @@ function jdqz{Alg <: CorrectionSolver}(
     max_iter::Int = 200,
     τ::Complex128 = 0.0 + 0im,       # Search target
     ɛ::Float64 = 1e-7,       # Maximum residual norm
-    T::Type = Complex128
+    numT::Type = Complex128
 )
     k = 0
     m = 0
@@ -22,29 +22,31 @@ function jdqz{Alg <: CorrectionSolver}(
 
     # Holds the final partial, generalized Schur decomposition where
     # AQ = ZS and BQ = ZT, with Q, Z orthonormal and S, T upper triangular.
-    Q = zeros(T, n, pairs)
-    Z = zeros(T, n, pairs)
-    S = zeros(T, pairs, pairs)
-    T = zeros(T, pairs, pairs)
+    Q = zeros(numT, n, pairs)
+    Z = zeros(numT, n, pairs)
+    S = zeros(numT, pairs, pairs)
+    T = zeros(numT, pairs, pairs)
 
     # Low-dimensional projections: MA = W'AV, MB = W'BV
-    MA = zeros(T, max_dimension, max_dimension)
-    MB = zeros(T, max_dimension, max_dimension)
+    MA = zeros(numT, max_dimension, max_dimension)
+    MB = zeros(numT, max_dimension, max_dimension)
 
     # Orthonormal search subspace
-    V = zeros(T, n, max_dimension)
+    V = zeros(numT, n, max_dimension)
     
     # Orthonormal test subspace
-    W = zeros(T, n, max_dimension)
+    W = zeros(numT, n, max_dimension)
 
     # AV will store A*V, without any orthogonalization
-    AV = zeros(T, n, max_dimension)
+    AV = zeros(numT, n, max_dimension)
 
     # BV will store B*V, without any orthogonalization
-    BV = zeros(T, n, max_dimension)
+    BV = zeros(numT, n, max_dimension)
+
+    iter = 1
 
     # Idea: after the expansion work only with views
-    # for instance V <- view(V, :, 1 : m - 1) and v = view(V, :, m)
+    # for instance V <- view(Vmatrix, :, 1 : m - 1) and v = view(Vmatrix, :, m)
     # so that it's less noisy down here.
 
     # Idea: store approximate Petrov pairs immediately inside Q and Z, rather than u and p
@@ -52,10 +54,10 @@ function jdqz{Alg <: CorrectionSolver}(
     while k ≤ pairs && iter ≤ max_iter
         if iter == 1
             view(V, :, m + 1) .= rand(n) # Initialize with a random vector
-        elseif iter < 3
+        elseif iter < 10
             view(V, :, m + 1) .= r # Expand with the residual ~ Arnoldi style
         else
-            view(V, :, m + 1) .= solve_deflated_correction(solver, A, rayleigh + τ, view(Q, :, 1 : k), u, r)
+            view(V, :, m + 1) .= solve_generalized_correction_equation(solver, A, B, view(Q, :, 1 : k), view(Z, :, 1 : k), u, p, ζ, η, r)
         end
 
         m += 1
@@ -63,8 +65,8 @@ function jdqz{Alg <: CorrectionSolver}(
         # Orthogonalize V[:, m] against the search subspace
         orthogonalize_and_normalize!(
             view(V, :, 1 : m - 1),
-            view(V, :, m + 1),
-            zeros(T, m - 1), 
+            view(V, :, m),
+            zeros(numT, m - 1),
             DGKS
         )
 
@@ -82,7 +84,7 @@ function jdqz{Alg <: CorrectionSolver}(
         just_orthogonalize!(view(Z, :, 1 : k), w, DGKS)
 
         # Make w orthonormal w.r.t. W
-        orthogonalize_and_normalize!(view(W, :, 1 : m - 1), w, zeros(T, m - 1), DGKS)
+        orthogonalize_and_normalize!(view(W, :, 1 : m - 1), w, zeros(numT, m - 1), DGKS)
 
         # Update MA = W' * A * V
         MA[m, m] = dot(view(W, :, m), view(AV, :, m))
@@ -94,12 +96,12 @@ function jdqz{Alg <: CorrectionSolver}(
         # Update MB = W' * B * V
         MB[m, m] = dot(view(W, :, m), view(BV, :, m))
         @inbounds for i = 1 : m - 1
-            M[i, m] = dot(view(W, :, i), view(BV, :, m))
-            M[m, i] = dot(view(W, :, m), view(BV, :, i))
+            MB[i, m] = dot(view(W, :, i), view(BV, :, m))
+            MB[m, i] = dot(view(W, :, m), view(BV, :, i))
         end
 
         # Extract a Petrov pair = approximate Schur pair.
-        F, u, p, r, ã, b̃ = extract_generalized(
+        F, u, p, r, ã, b̃, ζ, η = extract_generalized(
             view(MA, 1 : m, 1 : m),
             view(MB, 1 : m, 1 : m),
             view(V, :, 1 : m),
@@ -112,7 +114,7 @@ function jdqz{Alg <: CorrectionSolver}(
 
         # Store converged Petrov pairs
         while norm(r) ≤ ε
-            println("Found an eigenvalue")
+            println("Found an eigenvalue: ", ζ / η)
 
             # Store the eigenvalue
             S[k + 1, k + 1] = ζ
@@ -136,10 +138,10 @@ function jdqz{Alg <: CorrectionSolver}(
 
             # Remove the eigenvalue from the search subspace.
             # Shrink V, W, AV, and BV (can be done in-place; but probably not worth it)
-            V[:, 1 : m - 1] = view(V, :, 1 : m) * view(F.right, :, 2 : m)
-            AV[:, 1 : m - 1] = view(AV, :, 1 : m) * view(F.right, :, 2 : m)
-            BV[:, 1 : m - 1] = view(BV, :, 1 : m) * view(F.right, :, 2 : m)
-            W[:, 1 : m - 1] = view(W, :, 1 : m) * view(F.left, :, 2 : m)
+            V[:, 1 : m - 1] = view(V, :, 1 : m) * view(F[:right], :, 2 : m)
+            AV[:, 1 : m - 1] = view(AV, :, 1 : m) * view(F[:right], :, 2 : m)
+            BV[:, 1 : m - 1] = view(BV, :, 1 : m) * view(F[:right], :, 2 : m)
+            W[:, 1 : m - 1] = view(W, :, 1 : m) * view(F[:left], :, 2 : m)
             
             # Update the projection matrices M and MA.
             MA[1 : m - 1, 1 : m - 1] .= F.S[2 : m, 2 : m]
@@ -152,7 +154,7 @@ function jdqz{Alg <: CorrectionSolver}(
             # This can be done more efficient as there is no need to recompute
             # the whole Schur decomposition. We already have that and only need
             # to reorder it.
-            F, u, p, r, ã, b̃ = extract_generalized(
+            F, u, p, r, ã, b̃, ζ, η = extract_generalized(
                 view(MA, 1 : m, 1 : m),
                 view(MB, 1 : m, 1 : m),
                 view(V, :, 1 : m),
@@ -168,17 +170,17 @@ function jdqz{Alg <: CorrectionSolver}(
             println("Shrinking the search space.")
 
             # Move min_dimension of the smallest harmonic Ritz values up front
-            smallest = selectperm(abs.(F.alpha] ./ F.beta - τ), 1 : min_dimension)
-            p = falses(m)
-            p[smallest] = true
-            ordschur!(F, p)
+            smallest = selectperm(abs.(F.alpha ./ F.beta - τ), 1 : min_dimension)
+            perm = falses(m)
+            perm[smallest] = true
+            ordschur!(F, perm)
 
             # Shrink V, W, AV
             # Todo: V[:, 1], AV[:, 1], BV[:, 1] and W[:, 1] are already available, no need to recompute
-            V[:, 1 : min_dimension] = V * view(F.right, :, 1 : min_dimension)
-            AV[:, 1 : min_dimension] = AV * view(F.right, :, 1 : min_dimension)
-            BV[:, 1 : min_dimension] = AV * view(F.right, :, 1 : min_dimension)
-            W[:, 1 : min_dimension] = W * view(F.left, :, 1 : min_dimension)
+            V[:, 1 : min_dimension] = V * view(F[:right], :, 1 : min_dimension)
+            AV[:, 1 : min_dimension] = AV * view(F[:right], :, 1 : min_dimension)
+            BV[:, 1 : min_dimension] = AV * view(F[:right], :, 1 : min_dimension)
+            W[:, 1 : min_dimension] = W * view(F[:left], :, 1 : min_dimension)
 
             # Shrink the spaces
             m = min_dimension
@@ -187,7 +189,11 @@ function jdqz{Alg <: CorrectionSolver}(
             MA[1 : m, 1 : m] .= F.S[1 : m, 1 : m]
             MB[1 : m, 1 : m] .= F.T[1 : m, 1 : m]
         end
+
+        iter += 1
     end
+
+    return Q[:, 1 : k], Z[:, 1 : k], S[1 : k, 1 : k], T[1 : k, 1 : k]
 end
 
 function extract_generalized(MA, MB, V, W, AV, BV, Z, τ)
@@ -196,32 +202,32 @@ function extract_generalized(MA, MB, V, W, AV, BV, Z, τ)
     F = schurfact(MA, MB)
 
     smallest = indmin(abs.(F.alpha ./ F.beta - τ))
-    p = falses(m)
-    p[smallest] = true
-    ordschur!(F, p)
+    perm = falses(m)
+    perm[smallest] = true
+    ordschur!(F, perm)
 
-    # MA * F.right = F.left * F.S
-    # MB * F.right = F.left * F.T
+    # MA * F[:right] = F[:left] * F.S
+    # MB * F[:right] = F[:left] * F.T
 
     # TODO: don't allocate each time.
     # Petrov vector
-    u = V * F.right[:, 1]
-    p = V * F.left[:, 1]
-    Au = AV * F.right[:, 1]
-    Bu = BV * F.right[:, 1]
+    u = V * F[:right][:, 1]
+    p = V * F[:left][:, 1]
+    Au = AV * F[:right][:, 1]
+    Bu = BV * F[:right][:, 1]
 
     ζ = F.alpha[1]
     η = F.beta[1]
 
     # Residual
     # TODO: Make this BLAS.
-    r = η * Au - ζ Bu
+    r = η * Au - ζ * Bu
 
     ã = Z' * Au
-    b̃ = Z' * Ab
+    b̃ = Z' * Bu
 
     # TODO: make this BLAS.
     r -= Z * (η * ã - ζ * b̃)
 
-    F, u, p, r, ã, b̃
+    F, u, p, r, ã, b̃, ζ, η
 end

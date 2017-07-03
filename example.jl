@@ -5,6 +5,27 @@ import LinearMaps: LinearMap
 using Plots
 using JacobiDavidson
 
+function generalized(; n = 200, min = 10, max = 20)
+  srand(50)
+  A = 100 * speye(Complex128, n) + sprand(Complex128, n, n, .5)
+  B = 100 * speye(Complex128, n) + sprand(Complex128, n, n, .5)
+
+  values = eigvals(full(A), full(B))
+
+  Q, Z, S, T = jdqz(A, B, exact_solver(), τ = 0.3 + 0im)
+  
+  found = diag(S) ./ diag(T)
+
+  # try
+  #   Q, R = jdqz(A, B, exact_solver(), τ = 0.3 + 0im)
+  # catch
+  #   println("error.")  
+  # end
+
+  scatter(real(values), imag(values))
+  scatter!(real(found), imag(found), marker = :+)
+end
+
 function hermetian_example(; n = 200, min = 10, max = 30, )
   B = sprand(n, n, .2) + 100.0 * speye(n);
   B[1, 1] = 30.0

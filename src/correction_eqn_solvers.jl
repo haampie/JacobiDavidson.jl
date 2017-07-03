@@ -31,6 +31,17 @@ function solve_deflated_correction(solver::exact_solver, A, θ, X::AbstractMatri
   (Ã \ rhs)[1 : n]
 end
 
+function solve_generalized_correction_equation(solver::exact_solver, A, B, Q, Z, u, p, ζ, η, r)
+  n = size(A, 1)
+  @show size(Z), size(p)
+  Q = [Q u]
+  Z = [Z p]
+  m = size(Q, 2)
+  Ã = [(η * A - ζ * B) Z; Q' zeros(m, m)]
+  rhs = [-r; zeros(m, 1)]
+  (Ã \ rhs)[1 : n]
+end
+
 function solve_deflated_correction(solver::gmres_solver, A, θ, X::AbstractMatrix, u::AbstractVector, r::AbstractVector)
   n = size(A, 1)
 

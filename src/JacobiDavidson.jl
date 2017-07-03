@@ -11,6 +11,7 @@ include("jacobi_davidson_hermetian.jl")
 include("jdqr_harmonic.jl")
 include("jdqr_harmonic_efficient.jl")
 include("jdqr_harmonic_matrix.jl")
+include("jdqz.jl")
 include("gmres.jl")
 
 export jdqr_harmonic, jdqr_harmonic_efficient, jacobi_davidson_hermetian
