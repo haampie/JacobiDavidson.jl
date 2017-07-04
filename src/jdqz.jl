@@ -47,6 +47,8 @@ function jdqz{Alg <: CorrectionSolver}(
 
     iter = 1
 
+    r = zeros(numT, n)
+
     # Idea: after the expansion work only with views
     # for instance V <- view(Vmatrix, :, 1 : m - 1) and v = view(Vmatrix, :, m)
     # so that it's less noisy down here.
@@ -57,7 +59,7 @@ function jdqz{Alg <: CorrectionSolver}(
         if iter == 1
             view(V, :, m + 1) .= rand(n) # Initialize with a random vector
         else
-            view(V, :, m + 1) .= solve_generalized_correction_equation(solver, A, B, view(Q, :, 1 : k), view(Z, :, 1 : k), u, p, ζ, η, r)
+            view(V, :, m + 1) .= solve_generalized_correction_equation(solver, A, B, view(Q, :, 1 : k + 1), view(Z, :, 1 : k + 1), ζ, η, r)
         end
 
         m += 1
@@ -86,22 +88,20 @@ function jdqz{Alg <: CorrectionSolver}(
         # Make w orthonormal w.r.t. W
         orthogonalize_and_normalize!(view(W, :, 1 : m - 1), w, zeros(numT, m - 1), DGKS)
 
-        # Update MA = W' * A * V
-        MA[m, m] = dot(view(W, :, m), view(AV, :, m))
+        # Update the last row and column of MA = W' * A * V
+        Ac_mul_B!(view(MA, 1 : m, m), view(W, :, 1 : m), view(AV, :, m))
         @inbounds for i = 1 : m - 1
-            MA[i, m] = dot(view(W, :, i), view(AV, :, m))
             MA[m, i] = dot(view(W, :, m), view(AV, :, i))
         end
 
         # Update MB = W' * B * V
-        MB[m, m] = dot(view(W, :, m), view(BV, :, m))
+        Ac_mul_B!(view(MB, 1 : m, m), view(W, :, 1 : m), view(BV, :, m))
         @inbounds for i = 1 : m - 1
-            MB[i, m] = dot(view(W, :, i), view(BV, :, m))
             MB[m, i] = dot(view(W, :, m), view(BV, :, i))
         end
 
         # Extract a Petrov pair = approximate Schur pair.
-        F, u, p, r, ã, b̃, ζ, η = extract_generalized(
+        F, ã, b̃, ζ, η = extract_generalized!(
             view(MA, 1 : m, 1 : m),
             view(MB, 1 : m, 1 : m),
             view(V, :, 1 : m),
@@ -109,6 +109,9 @@ function jdqz{Alg <: CorrectionSolver}(
             view(AV, :, 1 : m),
             view(BV, :, 1 : m),
             view(Z, :, 1 : k),
+            view(Q, :, k + 1), # approximate schur vec
+            view(Z, :, k + 1), # other approx schur vec
+            r,
             τ
         )
 
@@ -125,10 +128,6 @@ function jdqz{Alg <: CorrectionSolver}(
             # Store the projections
             S[1 : k, k + 1] = ã
             T[1 : k, k + 1] = b̃
-            
-            # Store the Schur vectors (this will be redundant when storing the approximations here from the start)
-            Q[:, k + 1] .= u
-            Z[:, k + 1] .= p
 
             # One more eigenpair converged, yay.
             k += 1
@@ -156,7 +155,7 @@ function jdqz{Alg <: CorrectionSolver}(
             # This can be done more efficient as there is no need to recompute
             # the whole Schur decomposition. We already have that and only need
             # to reorder it.
-            F, u, p, r, ã, b̃, ζ, η = extract_generalized(
+            F, ã, b̃, ζ, η = extract_generalized!(
                 view(MA, 1 : m, 1 : m),
                 view(MB, 1 : m, 1 : m),
                 view(V, :, 1 : m),
@@ -164,6 +163,9 @@ function jdqz{Alg <: CorrectionSolver}(
                 view(AV, :, 1 : m),
                 view(BV, :, 1 : m),
                 view(Z, :, 1 : k),
+                view(Q, :, k + 1),
+                view(Z, :, k + 1),
+                r,
                 τ
             )
         end
@@ -199,7 +201,7 @@ function jdqz{Alg <: CorrectionSolver}(
     return Q[:, 1 : k], Z[:, 1 : k], S[1 : k, 1 : k], T[1 : k, 1 : k], residuals
 end
 
-function extract_generalized(MA, MB, V, W, AV, BV, Z, τ)
+function extract_generalized!{T}(MA::StridedMatrix{T}, MB, V, W, AV, BV, Z, u, p, r, τ)
     m = size(MA, 1)
 
     F = schurfact(MA, MB)
@@ -212,25 +214,33 @@ function extract_generalized(MA, MB, V, W, AV, BV, Z, τ)
     # MA * F[:right] = F[:left] * F.S
     # MB * F[:right] = F[:left] * F.T
 
-    # TODO: don't allocate each time.
-    # Petrov vector
-    u = V * F[:right][:, 1]
-    p = W * F[:left][:, 1]
-    Au = AV * F[:right][:, 1]
-    Bu = BV * F[:right][:, 1]
+    # Extract Petrov vector u = V * F[:right][:, 1]
+    right_eigenvec = view(F[:right], :, 1)
+    left_eigenvec = view(F[:left], :, 1)
+
+    A_mul_B!(u, V, right_eigenvec)
+    A_mul_B!(p, W, left_eigenvec)
+
+    # Make this non-allocating
+    Au = AV * right_eigenvec
+    Bu = BV * right_eigenvec
 
     ζ = F.alpha[1]
     η = F.beta[1]
 
     # Residual
-    # TODO: Make this BLAS.
-    r = η * Au - ζ * Bu
+    # r = η * Au - ζ * Bu
+    copy!(r, Au)
+    scale!(r, η)
+    axpy!(-ζ, Bu, r)
 
+    # This could be stored in-place as well.
     ã = Z' * Au
     b̃ = Z' * Bu
 
-    # TODO: make this BLAS.
-    r -= Z * (η * ã - ζ * b̃)
+    # r -= Z * (η * ã - ζ * b̃)
+    BLAS.gemv!('N', -η, Z, ã, one(T), r)
+    BLAS.gemv!('N', ζ, Z, b̃, one(T), r)
 
-    F, u, p, r, ã, b̃, ζ, η
+    F, ã, b̃, ζ, η
 end
