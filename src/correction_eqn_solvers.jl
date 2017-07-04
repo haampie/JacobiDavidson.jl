@@ -34,9 +34,23 @@ end
 function solve_generalized_correction_equation(solver::exact_solver, A, B, Q, Z, ζ, η, r)
   n = size(A, 1)
   m = size(Q, 2)
-  Ã = [(η * A - ζ * B) Z; Q' zeros(m, m)]
-  rhs = [-r; zeros(m, 1)]
-  (Ã \ rhs)[1 : n]
+  # Assuming both A and B are sparse while Q and Z are dense, let's try to avoid constructing a huge dense matrix.
+  # Let C = η * A - ζ * B
+
+  # We have to solve:
+  # |C  Z| |t| = |-r| 
+  # |Q' O| |z|   |0 |
+
+  # Use the Schur complement trick with S = -Q' * inv(C) * Z
+  # |C  Z| = |I            O| |C Z|
+  # |Q' O|   |Q' * inv(C)  I| |O S|
+
+  # And solve two systems with inv(C) occurring multiple times.
+  C = η * A - ζ * B # Completely sparse
+  y = Q' * (C \ r)
+  S = Q' * (C \ Z) # Schur complement
+  z = -S \ y
+  t = C \ (-r - Z * z)
 end
 
 function solve_deflated_correction(solver::gmres_solver, A, θ, X::AbstractMatrix, u::AbstractVector, r::AbstractVector)
