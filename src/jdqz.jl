@@ -58,9 +58,9 @@ function jdqz(
     # there is room for it already and it is necessary in the correction equation anyway.
     while k ≤ pairs && iter ≤ max_iter
         if iter == 1
-            view(V, :, m + 1) .= rand(n) # Initialize with a random vector
+            rand!(view(V, :, m + 1)) # Initialize with a random vector
         else
-            view(V, :, m + 1) .= solve_generalized_correction_equation(solver, A, B, view(Q, :, 1 : k + 1), view(Z, :, 1 : k + 1), ζ, η, r)
+            solve_generalized_correction_equation!(solver, A, B, view(V, :, m + 1), view(Q, :, 1 : k + 1), view(Z, :, 1 : k + 1), ζ, η, r)
         end
 
         m += 1
@@ -202,7 +202,7 @@ function jdqz(
     return Q[:, 1 : k], Z[:, 1 : k], S[1 : k, 1 : k], T[1 : k, 1 : k], residuals
 end
 
-function extract_generalized!{T}(MA::StridedMatrix{T}, MB, V, W, AV, BV, Z, u, p, r, τ)
+function extract_generalized!(MA::StridedMatrix{T}, MB, V, W, AV, BV, Z, u, p, r, τ) where {T}
     m = size(MA, 1)
 
     F = schurfact(MA, MB)

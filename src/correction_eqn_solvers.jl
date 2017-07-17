@@ -49,7 +49,7 @@ function solve_deflated_correction(solver::gmres_solver, A, θ, X::AbstractMatri
   gmres(C, -r, max_iter = solver.iterations, tol = solver.tolerance)
 end
 
-function solve_generalized_correction_equation(solver::exact_solver, A, B, Q, Z, ζ, η, r)
+function solve_generalized_correction_equation!(solver::exact_solver, A, B, x, Q, Z, ζ, η, r)
   n = size(A, 1)
   m = size(Q, 2)
   # Assuming both A and B are sparse while Q and Z are dense, let's try to avoid constructing a huge dense matrix.
@@ -68,10 +68,10 @@ function solve_generalized_correction_equation(solver::exact_solver, A, B, Q, Z,
   y = Q' * (C \ r)
   S = Q' * (C \ Z) # Schur complement
   z = -S \ y
-  t = C \ (-r - Z * z)
+  x .= C \ (-r - Z * z)
 end
 
-function solve_generalized_correction_equation(solver::gmres_solver, A, B, Q, Z, ζ, η, r)
+function solve_generalized_correction_equation!(solver::gmres_solver, A, B, x, Q, Z, ζ, η, r)
   n = size(A, 1)
   
   P1 = LinearMap(x -> x - Z * (Z' * x), nothing, n; ishermitian = true)
