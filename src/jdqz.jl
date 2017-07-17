@@ -1,5 +1,13 @@
 export jdqz
 
+import Base.LinAlg.axpy!
+
+mutable struct QZ_product{matT}
+    QZ::matT
+    QZ_inv::matT
+    LU
+end
+
 function jdqz(
     A,
     B,
@@ -10,7 +18,8 @@ function jdqz(
     max_iter::Int = 200,
     τ::Complex128 = 0.0 + 0im,       # Search target
     ɛ::Float64 = 1e-7,       # Maximum residual norm
-    numT::Type = Complex128
+    numT::Type = Complex128,
+    verbose::Bool = false
 ) where {Alg <: CorrectionSolver}
 
     k = 0
@@ -45,22 +54,34 @@ function jdqz(
 
     # BV will store B*V, without any orthogonalization
     BV = zeros(numT, n, max_dimension)
+    
+    large_matrix_tmp = zeros(numT, n, max_dimension)
+
+    # QZ = Q' * Z, which is used in the correction equation. QZ_inv = lufact!(copy!(QZ_inv, QZ))
+    QZ = QZ_product(
+        zeros(numT, pairs, pairs),
+        zeros(numT, pairs, pairs),
+        lufact(zeros(0, 0))
+    )
 
     iter = 1
 
     r = zeros(numT, n)
+    spare_vector = zeros(numT, n)
+
+    local ζ::numT
+    local η::numT
+    local F
 
     # Idea: after the expansion work only with views
     # for instance V <- view(Vmatrix, :, 1 : m - 1) and v = view(Vmatrix, :, m)
     # so that it's less noisy down here.
 
-    # Idea: store approximate Petrov pairs immediately inside Q and Z, rather than u and p
-    # there is room for it already and it is necessary in the correction equation anyway.
     while k ≤ pairs && iter ≤ max_iter
         if iter == 1
             rand!(view(V, :, m + 1)) # Initialize with a random vector
         else
-            solve_generalized_correction_equation!(solver, A, B, view(V, :, m + 1), view(Q, :, 1 : k + 1), view(Z, :, 1 : k + 1), ζ, η, r)
+            solve_generalized_correction_equation!(solver, A, B, view(V, :, m + 1), view(Q, :, 1 : k + 1), view(Z, :, 1 : k + 1), QZ, ζ, η, r, spare_vector)
         end
 
         m += 1
@@ -102,60 +123,9 @@ function jdqz(
         end
 
         # Extract a Petrov pair = approximate Schur pair.
-        F, ã, b̃, ζ, η = extract_generalized!(
-            view(MA, 1 : m, 1 : m),
-            view(MB, 1 : m, 1 : m),
-            view(V, :, 1 : m),
-            view(W, :, 1 : m),
-            view(AV, :, 1 : m),
-            view(BV, :, 1 : m),
-            view(Z, :, 1 : k),
-            view(Q, :, k + 1), # approximate schur vec
-            view(Z, :, k + 1), # other approx schur vec
-            r,
-            τ
-        )
+        should_extract = true
 
-        push!(residuals, norm(r))
-
-        # Store converged Petrov pairs
-        while norm(r) ≤ ɛ
-            println("Found an eigenvalue: ", ζ / η)
-
-            # Store the eigenvalue
-            S[k + 1, k + 1] = ζ
-            T[k + 1, k + 1] = η
-
-            # Store the projections
-            S[1 : k, k + 1] = ã
-            T[1 : k, k + 1] = b̃
-
-            # One more eigenpair converged, yay.
-            k += 1
-
-            # Was this the last eigenpair?
-            if k == pairs
-                return Q, Z, S, T, residuals
-            end
-
-            # Remove the eigenvalue from the search subspace.
-            # Shrink V, W, AV, and BV (can be done in-place; but probably not worth it)
-            V[:, 1 : m - 1] = view(V, :, 1 : m) * view(F[:right], :, 2 : m)
-            AV[:, 1 : m - 1] = view(AV, :, 1 : m) * view(F[:right], :, 2 : m)
-            BV[:, 1 : m - 1] = view(BV, :, 1 : m) * view(F[:right], :, 2 : m)
-            W[:, 1 : m - 1] = view(W, :, 1 : m) * view(F[:left], :, 2 : m)
-            
-            # Update the projection matrices M and MA.
-            MA[1 : m - 1, 1 : m - 1] .= F.S[2 : m, 2 : m]
-            MB[1 : m - 1, 1 : m - 1] .= F.T[2 : m, 2 : m]
-
-            # One vector is removed from the search space.
-            m -= 1
-
-            # Extract the next approximate eigenpair.
-            # This can be done more efficient as there is no need to recompute
-            # the whole Schur decomposition. We already have that and only need
-            # to reorder it.
+        while should_extract
             F, ã, b̃, ζ, η = extract_generalized!(
                 view(MA, 1 : m, 1 : m),
                 view(MB, 1 : m, 1 : m),
@@ -164,15 +134,67 @@ function jdqz(
                 view(AV, :, 1 : m),
                 view(BV, :, 1 : m),
                 view(Z, :, 1 : k),
-                view(Q, :, k + 1),
-                view(Z, :, k + 1),
+                view(Q, :, k + 1), # approximate schur vec
+                view(Z, :, k + 1), # other approx schur vec
                 r,
                 τ
             )
+
+            update_qz!(QZ, Q, Z, k + 1)
+
+            resnorm = norm(r)
+
+            push!(residuals, resnorm)
+            
+            verbose && println("Resnorm = ", resnorm)
+
+            # Store converged Petrov pairs
+            if resnorm ≤ ɛ
+                verbose && println("Found an eigenvalue: ", ζ / η)
+
+                # Store the eigenvalue (do this in-place?)
+                S[k + 1, k + 1] = ζ
+                T[k + 1, k + 1] = η
+
+                # Store the projections (do this in-place?)
+                S[1 : k, k + 1] = ã
+                T[1 : k, k + 1] = b̃
+
+                # One more eigenpair converged, yay.
+                k += 1
+
+                # Was this the last eigenpair?
+                if k == pairs
+                    return Q, Z, S, T, residuals
+                end
+
+                # Remove the eigenvalue from the search subspace.
+                # Shrink V, W, AV, and BV (can be done in-place; but probably not worth it)
+                A_mul_B!(view(large_matrix_tmp, :, 1 : m - 1), view(V, :, 1 : m), view(F[:right], :, 2 : m))
+                copy!(view(V, :, 1 : m - 1), view(large_matrix_tmp, :, 1 : m - 1))
+
+                A_mul_B!(view(large_matrix_tmp, :, 1 : m - 1), view(AV, :, 1 : m), view(F[:right], :, 2 : m))
+                copy!(view(AV, :, 1 : m - 1), view(large_matrix_tmp, :, 1 : m - 1))
+
+                A_mul_B!(view(large_matrix_tmp, :, 1 : m - 1), view(BV, :, 1 : m), view(F[:right], :, 2 : m))
+                copy!(view(BV, :, 1 : m - 1), view(large_matrix_tmp, :, 1 : m - 1))
+
+                A_mul_B!(view(large_matrix_tmp, :, 1 : m - 1), view(W, :, 1 : m), view(F[:left], :, 2 : m))
+                copy!(view(W, :, 1 : m - 1), view(large_matrix_tmp, :, 1 : m - 1))
+                
+                # Update the projection matrices M and MA.
+                copy!(view(MA, 1 : m - 1, 1 : m - 1), view(F.S, 2 : m, 2 : m))
+                copy!(view(MB, 1 : m - 1, 1 : m - 1), view(F.T, 2 : m, 2 : m))
+
+                # One vector is removed from the search space.
+                m -= 1
+            else
+                should_extract = false
+            end
         end
 
         if m == max_dimension
-            println("Shrinking the search space.")
+            verbose && println("Shrinking the search space.")
             push!(residuals, NaN)
 
             # Move min_dimension of the smallest harmonic Ritz values up front
@@ -183,17 +205,24 @@ function jdqz(
 
             # Shrink V, W, AV
             # Todo: V[:, 1], AV[:, 1], BV[:, 1] and W[:, 1] are already available, no need to recompute
-            V[:, 1 : min_dimension] = V * view(F[:right], :, 1 : min_dimension)
-            AV[:, 1 : min_dimension] = AV * view(F[:right], :, 1 : min_dimension)
-            BV[:, 1 : min_dimension] = BV * view(F[:right], :, 1 : min_dimension)
-            W[:, 1 : min_dimension] = W * view(F[:left], :, 1 : min_dimension)
+            A_mul_B!(view(large_matrix_tmp, :, 1 : min_dimension), V, view(F[:right], :, 1 : min_dimension))
+            copy!(view(V, :, 1 : min_dimension), view(large_matrix_tmp, :, 1 : min_dimension))
+
+            A_mul_B!(view(large_matrix_tmp, :, 1 : min_dimension), AV, view(F[:right], :, 1 : min_dimension))
+            copy!(view(AV, :, 1 : min_dimension), view(large_matrix_tmp, :, 1 : min_dimension))
+
+            A_mul_B!(view(large_matrix_tmp, :, 1 : min_dimension), BV, view(F[:right], :, 1 : min_dimension))
+            copy!(view(BV, :, 1 : min_dimension), view(large_matrix_tmp, :, 1 : min_dimension))
+
+            A_mul_B!(view(large_matrix_tmp, :, 1 : min_dimension), W, view(F[:left], :, 1 : min_dimension))
+            copy!(view(BV, :, 1 : min_dimension), view(large_matrix_tmp, :, 1 : min_dimension))
 
             # Shrink the spaces
             m = min_dimension
 
             # Update M and MA.
-            MA[1 : m, 1 : m] .= F.S[1 : m, 1 : m]
-            MB[1 : m, 1 : m] .= F.T[1 : m, 1 : m]
+            copy!(view(MA, 1 : m, 1 : m), view(F.S, 1 : m, 1 : m))
+            copy!(view(MB, 1 : m, 1 : m), view(F.T, 1 : m, 1 : m))
         end
 
         iter += 1
@@ -244,4 +273,17 @@ function extract_generalized!(MA::StridedMatrix{T}, MB, V, W, AV, BV, Z, u, p, r
     BLAS.gemv!('N', ζ, Z, b̃, one(T), r)
 
     F, ã, b̃, ζ, η
+end
+
+"""
+Updates the last row and column of QZ = Q' * Z
+and computes the LU factorization of QZ
+"""
+function update_qz!(QZ, Q, Z, k)
+    for i = 1 : k
+        QZ.QZ[i, k] = dot(view(Q, :, i), view(Z, :, k))
+        QZ.QZ[k, i] = dot(view(Q, :, k), view(Z, :, i))
+    end
+    copy!(view(QZ.QZ_inv, 1 : k, 1 : k), view(QZ.QZ, 1 : k, 1 : k))
+    QZ.LU = lufact!(view(QZ.QZ_inv, 1 : k, 1 : k))
 end

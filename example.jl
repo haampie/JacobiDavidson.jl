@@ -4,14 +4,14 @@ using Plots
 using JacobiDavidson
 using LinearMaps
 
-function generalized(; n = 200, min = 10, max = 20)
+function generalized(; n = 100, min = 10, max = 20)
   srand(50)
-  A = 100 * speye(Complex128, n) + sprand(Complex128, n, n, .5)
-  B = 100 * speye(Complex128, n) + sprand(Complex128, n, n, .5)
+  A = 2 * speye(Complex128, n) + sprand(Complex128, n, n, 1 / n)
+  B = 2 * speye(Complex128, n) + sprand(Complex128, n, n, 1 / n)
 
   values = eigvals(full(A), full(B))
 
-  Q, Z, S, T, residuals = jdqz(A, B, gmres_solver(), τ = 1.0 + 0im, pairs = 20)
+  Q, Z, S, T, residuals = jdqz(A, B, bicgstabl_solver(A, max_mv_products = 40), τ = 0.0 + 0.0im, pairs = 20, max_iter = 1000)
   
   found = diag(S) ./ diag(T)
 
