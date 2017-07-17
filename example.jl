@@ -23,6 +23,42 @@ function generalized(; n = 200, min = 10, max = 20)
   p1, p2
 end
 
+function test_harmonic_2(n = 1000; τ = 1.52 + 0.0im)
+  srand(4)
+
+  A = spdiagm(
+    (fill(-1.0, n - 1), 
+    fill(2.0, n),
+    fill(-1.0, n - 1)),
+    (-1, 0, 1)
+  )
+  
+  B = speye(n)
+
+  values = eigvals(full(A), full(B))
+
+  Q, Z, S, T, residuals = jdqz(
+    A,
+    B,
+    exact_solver(),
+    pairs = 10,
+    min_dimension = 10,
+    max_dimension = 20,
+    max_iter = 300,
+    ɛ = 1e-5,
+    τ = τ
+  )
+
+  found = diag(S) ./ diag(T)
+
+  p1 = scatter(real(values), imag(values), ylims = (-1, 1))
+  scatter!(real(found), imag(found), marker = :+)
+
+  p2 = plot(residuals, yscale = :log10)
+
+  p1, p2
+end
+
 function test_harmonic(; n = 500, τ = 1.52 + 0.0im)
   srand(4)
 

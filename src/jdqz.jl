@@ -1,6 +1,6 @@
 export jdqz
 
-function jdqz{Alg <: CorrectionSolver}(
+function jdqz(
     A,
     B,
     solver::Alg;             # Solver for the correction equation
@@ -11,7 +11,8 @@ function jdqz{Alg <: CorrectionSolver}(
     τ::Complex128 = 0.0 + 0im,       # Search target
     ɛ::Float64 = 1e-7,       # Maximum residual norm
     numT::Type = Complex128
-)
+) where {Alg <: CorrectionSolver}
+
     k = 0
     m = 0
     n = size(A, 1)
