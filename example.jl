@@ -12,7 +12,7 @@ function generalized(; n = 200, min = 10, max = 20)
 
   values = eigvals(full(A), full(B))
 
-  Q, Z, S, T, residuals = jdqz(A, B, exact_solver(), τ = 1.0 + 0im, pairs = 20)
+  Q, Z, S, T, residuals = jdqz(A, B, gmres_solver(), τ = 1.0 + 0im, pairs = 20)
   
   found = diag(S) ./ diag(T)
 

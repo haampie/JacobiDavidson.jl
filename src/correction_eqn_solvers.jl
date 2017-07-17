@@ -31,6 +31,24 @@ function solve_deflated_correction(solver::exact_solver, A, θ, X::AbstractMatri
   (Ã \ rhs)[1 : n]
 end
 
+function solve_deflated_correction(solver::gmres_solver, A, θ, X::AbstractMatrix, u::AbstractVector, r::AbstractVector)
+  n = size(A, 1)
+
+  # Define the residual mapping
+  R = LinearMap(x -> A * x - θ * x, nothing, n)
+
+  # Projection Cⁿ → Cⁿ ∖ span {u}: P1x = (I - uu')x
+  P1 = LinearMap(x -> x - dot(u, x) * u, nothing, n; ishermitian = true)
+
+  # Projection Cⁿ → Cⁿ ∖ span {X}: P2x = (I - XX')x
+  P2 = LinearMap(x -> x - X * (X' * x), nothing, n; ishermitian = true)
+
+  # Coefficient matrix A - θI restricted map: Cⁿ ∖ span {Q} -> Cⁿ ∖ span {Q}
+  C = P2 * P1 * R
+
+  gmres(C, -r, max_iter = solver.iterations, tol = solver.tolerance)
+end
+
 function solve_generalized_correction_equation(solver::exact_solver, A, B, Q, Z, ζ, η, r)
   n = size(A, 1)
   m = size(Q, 2)
@@ -53,20 +71,12 @@ function solve_generalized_correction_equation(solver::exact_solver, A, B, Q, Z,
   t = C \ (-r - Z * z)
 end
 
-function solve_deflated_correction(solver::gmres_solver, A, θ, X::AbstractMatrix, u::AbstractVector, r::AbstractVector)
+function solve_generalized_correction_equation(solver::gmres_solver, A, B, Q, Z, ζ, η, r)
   n = size(A, 1)
+  
+  P1 = LinearMap(x -> x - Z * (Z' * x), nothing, n; ishermitian = true)
+  R = LinearMap(x -> η * A * x - ζ * B * x, nothing, n)
+  P2 = LinearMap(x -> x - Q * (Q' * x), nothing, n; ishermitian = true)
 
-  # Define the residual mapping
-  R = LinearMap(x -> A * x - θ * x, nothing, n)
-
-  # Projection Cⁿ → Cⁿ ∖ span {u}: P1x = (I - uu')x
-  P1 = LinearMap(x -> x - dot(u, x) * u, nothing, n; ishermitian = true)
-
-  # Projection Cⁿ → Cⁿ ∖ span {X}: P2x = (I - XX')x
-  P2 = LinearMap(x -> x - X * (X' * x), nothing, n; ishermitian = true)
-
-  # Coefficient matrix A - θI restricted map: Cⁿ ∖ span {Q} -> Cⁿ ∖ span {Q}
   C = P2 * P1 * R
-
-  gmres(C, -r, max_iter = solver.iterations, tol = solver.tolerance)
 end
