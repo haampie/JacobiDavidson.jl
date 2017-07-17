@@ -3,21 +3,21 @@ import Base.LinAlg: Schur
 abstract type Target end
 
 # For finding eigenvalues near a target
-type Near <: Target
+immutable Near <: Target
   target::Complex{Float64}
 end
 
 # For finding eigenvalues with the largest magnitude
-type SM <: Target end
+immutable SM <: Target end
 
 # For finding eigenvalues with the smallest magnitude
-type LM <: Target end
+immutable LM <: Target end
 
 # For finding eigenvalues with the largest real part
-type LR <: Target end
+immutable LR <: Target end
 
 # For finding eigenvalues with the smallest real part
-type SR <: Target end
+immutable SR <: Target end
 
 schur_permutation(target::Near, θs) = sortperm(abs(θs - target.target))
 schur_permutation(target::LM, θs) = sortperm(abs(θs), rev = true)
