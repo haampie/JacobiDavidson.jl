@@ -1,7 +1,7 @@
 export DGKS, ClassicalGramSchmidt, ModifiedGramSchmidt
 export orthogonalize_and_normalize!
 
-abstract OrthogonalizationMethod
+abstract type OrthogonalizationMethod end
 immutable DGKS <: OrthogonalizationMethod end
 immutable ClassicalGramSchmidt <: OrthogonalizationMethod end
 immutable ModifiedGramSchmidt <: OrthogonalizationMethod end
