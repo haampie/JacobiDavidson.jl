@@ -1,6 +1,6 @@
-export jdqr_harmonic_matrix
+export jdqr_harmonic
 
-function jdqr_harmonic_matrix{Alg <: CorrectionSolver}(
+function jdqr_harmonic{Alg <: CorrectionSolver}(
     A,                       # Some square Hermetian matrix
     solver::Alg;             # Solver for the correction equation
     pairs::Int = 5,          # Number of eigenpairs wanted
@@ -162,7 +162,7 @@ function jdqr_harmonic_matrix{Alg <: CorrectionSolver}(
             println("Shrinking the search space.")
 
             # Move min_dimension of the smallest harmonic Ritz values up front
-            smallest = selectperm(abs(F[:alpha] ./ F[:beta]), 1 : min_dimension)
+            smallest = selectperm(abs.(F[:alpha] ./ F[:beta]), 1 : min_dimension)
             p = falses(m)
             p[smallest] = true
             ordschur!(F, p)
