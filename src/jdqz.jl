@@ -126,7 +126,7 @@ function jdqz(
         should_extract = true
 
         while should_extract
-            F, ã, b̃, ζ, η = extract_generalized!(
+            F, ζ, η = extract_generalized!(
                 view(MA, 1 : m, 1 : m),
                 view(MB, 1 : m, 1 : m),
                 view(V, :, 1 : m),
@@ -137,7 +137,8 @@ function jdqz(
                 view(Q, :, k + 1), # approximate schur vec
                 view(Z, :, k + 1), # other approx schur vec
                 r,
-                τ
+                τ,
+                spare_vector
             )
 
             update_qz!(QZ, Q, Z, k + 1)
@@ -155,10 +156,6 @@ function jdqz(
                 # Store the eigenvalue (do this in-place?)
                 S[k + 1, k + 1] = ζ
                 T[k + 1, k + 1] = η
-
-                # Store the projections (do this in-place?)
-                S[1 : k, k + 1] = ã
-                T[1 : k, k + 1] = b̃
 
                 # One more eigenpair converged, yay.
                 k += 1
@@ -231,7 +228,7 @@ function jdqz(
     return Q[:, 1 : k], Z[:, 1 : k], S[1 : k, 1 : k], T[1 : k, 1 : k], residuals
 end
 
-function extract_generalized!(MA::StridedMatrix{T}, MB, V, W, AV, BV, Z, u, p, r, τ) where {T}
+function extract_generalized!(MA::StridedMatrix{T}, MB, V, W, AV, BV, Z, u, p, r, τ, spare_vector) where {T}
     m = size(MA, 1)
 
     F = schurfact(MA, MB)
@@ -251,28 +248,20 @@ function extract_generalized!(MA::StridedMatrix{T}, MB, V, W, AV, BV, Z, u, p, r
     A_mul_B!(u, V, right_eigenvec)
     A_mul_B!(p, W, left_eigenvec)
 
-    # Make this non-allocating
-    Au = AV * right_eigenvec
-    Bu = BV * right_eigenvec
-
     ζ = F.alpha[1]
     η = F.beta[1]
 
     # Residual
     # r = η * Au - ζ * Bu
-    copy!(r, Au)
+    A_mul_B!(r, AV, right_eigenvec)
+    A_mul_B!(spare_vector, BV, right_eigenvec)
     scale!(r, η)
-    axpy!(-ζ, Bu, r)
+    axpy!(-ζ, spare_vector, r)
 
-    # This could be stored in-place as well.
-    ã = Z' * Au
-    b̃ = Z' * Bu
+    # r <- (I - ZZ')r
+    just_orthogonalize!(Z, r, DGKS)
 
-    # r -= Z * (η * ã - ζ * b̃)
-    BLAS.gemv!('N', -η, Z, ã, one(T), r)
-    BLAS.gemv!('N', ζ, Z, b̃, one(T), r)
-
-    F, ã, b̃, ζ, η
+    F, ζ, η
 end
 
 """
