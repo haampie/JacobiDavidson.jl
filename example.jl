@@ -4,19 +4,23 @@ using Plots
 using JacobiDavidson
 using LinearMaps
 
-function generalized(; n = 100, min = 10, max = 20)
+function generalized(; n = 1_000, target = 1.7 + 0.1im)
   srand(50)
   A = 2 * speye(Complex128, n) + sprand(Complex128, n, n, 1 / n)
   B = 2 * speye(Complex128, n) + sprand(Complex128, n, n, 1 / n)
 
   values = eigvals(full(A), full(B))
 
-  Q, Z, S, T, residuals = jdqz(A, B, bicgstabl_solver(A, max_mv_products = 40), τ = 0.0 + 0.0im, pairs = 20, max_iter = 1000)
+  @time Q, Z, S, T, residuals = jdqz(A, B, bicgstabl_solver(A, max_mv_products = 32), τ = target, pairs = 20, max_iter = 2000, verbose = true)
   
   found = diag(S) ./ diag(T)
 
-  p1 = scatter(real(values), imag(values))
-  scatter!(real(found), imag(found), marker = :+)
+  @time d, = eigs(A, B, sigma = target, nev = 20, tol = 1e-8)
+
+  p1 = scatter(real(values), imag(values), label = "eig")
+  scatter!(real(found), imag(found), marker = :+, label = "jdqz")
+  scatter!(real(d), imag(d), marker = :x, label = "eigs")
+  scatter!([real(target)], [imag(target)], marker = :star, label = "Target")
 
   p2 = plot(residuals, yscale = :log10)
 
