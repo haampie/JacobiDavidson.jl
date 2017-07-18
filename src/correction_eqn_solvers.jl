@@ -115,7 +115,7 @@ this is simplified in Krylov subspaces as solving
 (ηA - ζB)t = b
 with the left preconditioner Pl = (I - Z inv(Q'Z) Q')
 """
-function solve_generalized_correction_equation!(solver::gmres_solver, A, B, x, Q, Z, QZ, ζ, η, r, spare_vector)
+function solve_generalized_correction_equation!(solver::gmres_solver, A, B, x, Q, Z, QZ, ζ, η, r, spare_vector, tol)
 
   n = size(A, 1)
   T = eltype(x)
@@ -137,7 +137,7 @@ function solve_generalized_correction_equation!(solver::gmres_solver, A, B, x, Q
   copy!(x, iterable.x)
 end
 
-function solve_generalized_correction_equation!(solver::bicgstabl_solver, A, B, x, Q, Z, QZ, ζ, η, r, spare_vector)
+function solve_generalized_correction_equation!(solver::bicgstabl_solver, A, B, x, Q, Z, QZ, ζ, η, r, spare_vector, tol)
   n = size(A, 1)
   T = eltype(x)
 
@@ -168,7 +168,7 @@ function solve_generalized_correction_equation!(solver::bicgstabl_solver, A, B, 
   nrm = norm(residual)
 
   # Stopping condition based on relative tolerance.
-  reltol = nrm * solver.tolerance
+  reltol = nrm * tol
 
   iterable = BiCGStabIterable(Ax_minus_Bx, r, solver.l, x, solver.r_shadow, solver.rs, solver.us,
       solver.max_mv_products, mv_products, reltol, nrm,
@@ -178,6 +178,10 @@ function solve_generalized_correction_equation!(solver::bicgstabl_solver, A, B, 
 
   for res = iterable 
     # println(res)  
+  end
+
+  if converged(iterable)
+    println("Converged")
   end
 
   nothing

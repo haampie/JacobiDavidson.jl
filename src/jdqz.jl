@@ -22,6 +22,8 @@ function jdqz(
     verbose::Bool = false
 ) where {Alg <: CorrectionSolver}
 
+    solver_reltol = one(real(numT))
+
     k = 0
     m = 0
     n = size(A, 1)
@@ -80,10 +82,12 @@ function jdqz(
     # so that it's less noisy down here.
 
     while k ≤ pairs && iter ≤ max_iter
+        solver_reltol /= 2
+
         if iter == 1
-            rand!(view(V, :, m + 1)) # Initialize with a random vector
+            rand!(view(V, :, 1)) # Initialize with a random vector
         else
-            solve_generalized_correction_equation!(solver, A, B, view(V, :, m + 1), view(Q, :, 1 : k + 1), view(Z, :, 1 : k + 1), QZ, ζ, η, r, spare_vector)
+            solve_generalized_correction_equation!(solver, A, B, view(V, :, m + 1), view(Q, :, 1 : k + 1), view(Z, :, 1 : k + 1), QZ, ζ, η, r, spare_vector, solver_reltol)
         end
 
         m += 1
@@ -158,6 +162,9 @@ function jdqz(
                 # Store the eigenvalue (do this in-place?)
                 S[k + 1, k + 1] = ζ
                 T[k + 1, k + 1] = η
+
+                # Reset the iterative solver tolerance
+                solver_reltol = one(real(numT))
 
                 # One more eigenpair converged, yay.
                 k += 1
