@@ -180,9 +180,5 @@ function solve_generalized_correction_equation!(solver::bicgstabl_solver, A, B, 
     # println(res)  
   end
 
-  if converged(iterable)
-    println("Converged")
-  end
-
   nothing
 end
