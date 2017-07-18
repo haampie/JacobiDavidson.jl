@@ -16,7 +16,7 @@ function jdqz(
     min_dimension::Int = 10, # Minimal search space size
     max_dimension::Int = 20, # Maximal search space size
     max_iter::Int = 200,
-    τ::Complex128 = 0.0 + 0im,       # Search target
+    target::Target = LM(),       # Search target
     ɛ::Float64 = 1e-7,       # Maximum residual norm
     numT::Type = Complex128,
     verbose::Bool = false
@@ -28,7 +28,9 @@ function jdqz(
 
     residuals = real(numT)[]
 
-    # Harmonic Petrov values 
+    # Harmonic Petrov values
+    τ = isa(target, Near) ? target.τ : rand(numT)
+    
     ν = 1 / sqrt(1 + abs2(τ))
     μ = -τ * ν
 
@@ -137,7 +139,7 @@ function jdqz(
                 view(Q, :, k + 1), # approximate schur vec
                 view(Z, :, k + 1), # other approx schur vec
                 r,
-                τ,
+                target,
                 spare_vector
             )
 
@@ -195,10 +197,7 @@ function jdqz(
             push!(residuals, NaN)
 
             # Move min_dimension of the smallest harmonic Ritz values up front
-            smallest = selectperm(abs.(F.alpha ./ F.beta - τ), 1 : min_dimension)
-            perm = falses(m)
-            perm[smallest] = true
-            ordschur!(F, perm)
+            schur_sort!(target, F, 1 : min_dimension)
 
             # Shrink V, W, AV
             # Todo: V[:, 1], AV[:, 1], BV[:, 1] and W[:, 1] are already available, no need to recompute
@@ -228,15 +227,11 @@ function jdqz(
     return Q[:, 1 : k], Z[:, 1 : k], S[1 : k, 1 : k], T[1 : k, 1 : k], residuals
 end
 
-function extract_generalized!(MA::StridedMatrix{T}, MB, V, W, AV, BV, Z, u, p, r, τ, spare_vector) where {T}
+function extract_generalized!(MA::StridedMatrix{T}, MB, V, W, AV, BV, Z, u, p, r, target, spare_vector) where {T}
     m = size(MA, 1)
 
     F = schurfact(MA, MB)
-
-    smallest = indmin(abs.(F.alpha ./ F.beta - τ))
-    perm = falses(m)
-    perm[smallest] = true
-    ordschur!(F, perm)
+    schur_sort!(target, F, 1)
 
     # MA * F[:right] = F[:left] * F.S
     # MB * F[:right] = F[:left] * F.T
