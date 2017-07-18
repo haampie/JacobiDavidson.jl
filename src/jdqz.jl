@@ -168,16 +168,16 @@ function jdqz(
                 # Remove the eigenvalue from the search subspace.
                 # Shrink V, W, AV, and BV (can be done in-place; but probably not worth it)
                 A_mul_B!(view(large_matrix_tmp, :, 1 : m - 1), view(V, :, 1 : m), view(F[:right], :, 2 : m))
-                copy!(view(V, :, 1 : m - 1), view(large_matrix_tmp, :, 1 : m - 1))
+                V, large_matrix_tmp = large_matrix_tmp, V
 
                 A_mul_B!(view(large_matrix_tmp, :, 1 : m - 1), view(AV, :, 1 : m), view(F[:right], :, 2 : m))
-                copy!(view(AV, :, 1 : m - 1), view(large_matrix_tmp, :, 1 : m - 1))
+                AV, large_matrix_tmp = large_matrix_tmp, AV
 
                 A_mul_B!(view(large_matrix_tmp, :, 1 : m - 1), view(BV, :, 1 : m), view(F[:right], :, 2 : m))
-                copy!(view(BV, :, 1 : m - 1), view(large_matrix_tmp, :, 1 : m - 1))
+                BV, large_matrix_tmp = large_matrix_tmp, BV
 
                 A_mul_B!(view(large_matrix_tmp, :, 1 : m - 1), view(W, :, 1 : m), view(F[:left], :, 2 : m))
-                copy!(view(W, :, 1 : m - 1), view(large_matrix_tmp, :, 1 : m - 1))
+                W, large_matrix_tmp = large_matrix_tmp, W
                 
                 # Update the projection matrices M and MA.
                 copy!(view(MA, 1 : m - 1, 1 : m - 1), view(F.S, 2 : m, 2 : m))
@@ -203,16 +203,16 @@ function jdqz(
             # Shrink V, W, AV
             # Todo: V[:, 1], AV[:, 1], BV[:, 1] and W[:, 1] are already available, no need to recompute
             A_mul_B!(view(large_matrix_tmp, :, 1 : min_dimension), V, view(F[:right], :, 1 : min_dimension))
-            copy!(view(V, :, 1 : min_dimension), view(large_matrix_tmp, :, 1 : min_dimension))
+            V, large_matrix_tmp = large_matrix_tmp, V
 
             A_mul_B!(view(large_matrix_tmp, :, 1 : min_dimension), AV, view(F[:right], :, 1 : min_dimension))
-            copy!(view(AV, :, 1 : min_dimension), view(large_matrix_tmp, :, 1 : min_dimension))
+            AV, large_matrix_tmp = large_matrix_tmp, AV
 
             A_mul_B!(view(large_matrix_tmp, :, 1 : min_dimension), BV, view(F[:right], :, 1 : min_dimension))
-            copy!(view(BV, :, 1 : min_dimension), view(large_matrix_tmp, :, 1 : min_dimension))
+            BV, large_matrix_tmp = large_matrix_tmp, BV
 
             A_mul_B!(view(large_matrix_tmp, :, 1 : min_dimension), W, view(F[:left], :, 1 : min_dimension))
-            copy!(view(BV, :, 1 : min_dimension), view(large_matrix_tmp, :, 1 : min_dimension))
+            W, large_matrix_tmp = large_matrix_tmp, W
 
             # Shrink the spaces
             m = min_dimension
