@@ -9,10 +9,10 @@ struct Near{T} <: Target
   τ::Complex{T}
 end
 
-# For finding eigenvalues with the largest magnitude
+# For finding eigenvalues with the smallest magnitude
 struct SM <: Target end
 
-# For finding eigenvalues with the smallest magnitude
+# For finding eigenvalues with the largest magnitude
 struct LM <: Target end
 
 # For finding eigenvalues with the largest real part
