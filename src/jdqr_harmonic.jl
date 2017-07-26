@@ -1,29 +1,49 @@
 export jdqr_harmonic
 
+import Base.LinAlg.GeneralizedSchur
+
 """
-`Q_all` will form a unitary matrix of Schur vectors
-`Q` contains the locked + currently active Schur vectors
-`R` will be upper triangular
-`curr` is the current active Schur vector
-`locked` is the number of converged Schur vecs
+`Q` is the pre-allocated work space of Schur vector
+`R` will be the upper triangular factor
+
+`Q` has the form [q₁, ..., qₖ, qₖ₊₁, qₖ₊₂, ..., q_pairs] where q₁ ... qₖ are already converged
+and thus locked, while qₖ₊₁ is the active Schur vector that is converging, and the remaining
+columns are just garbage data.
+
+It is very useful to have views for these columns:
+`Q_locked` is the matrix view [q₁, ..., qₖ]
+`Q_active` is the column vector qₖ₊₁
+`Q_all` is the matrix view of the non-garbage part [q₁, ..., qₖ, qₖ₊₁]
+`locked` is the number of locked Schur vectors
 """
-type PartialSchur{matT <: StridedMatrix, viewT <: StridedMatrix, vecT <: StridedVector}
-    Q_all::matT
+type PartialSchur{matT <: StridedMatrix, matViewT <: StridedMatrix, vecViewT <: StridedVector}
+    Q::matT
     R::matT
     
-    Q::viewT
-    curr::vecT
+    Q_locked::matViewT
+    Q_active::vecViewT
+    Q_all::matViewT
+
     locked::Int
 end
 
-PartialSchur(Q, R) = PartialSchur(Q, R, view(Q, :, 1 : 1), view(Q, :, 1), 0)
+PartialSchur(Q, R) = PartialSchur(
+    Q,
+    R,
+    view(Q, :, 1 : 0), # Empty view initially
+    view(Q, :, 1),
+    view(Q, :, 1 : 1),
+    0
+)
 
 function lock!(schur::PartialSchur)
     schur.locked += 1
+    schur.Q_locked = view(schur.Q_all, :, 1 : schur.locked)
 
+    # Don't extend beyond the max number of Schur vectors
     if schur.locked < size(schur.Q_all, 2)
-        schur.Q = view(schur.Q_all, :, 1 : schur.locked + 1)
-        schur.curr = view(schur.curr, :, schur.locked + 1)
+        schur.Q_all = view(schur.Q_all, :, 1 : schur.locked + 1)
+        schur.Q_active = view(schur.Q_all, :, schur.locked + 1)
     end
 
     schur
@@ -38,7 +58,8 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
     max_iter::Int = 200,
     τ::Complex128 = 0.0 + 0im,       # Search target
     ɛ::Float64 = 1e-7,       # Maximum residual norm
-    T::Type = Complex128
+    T::Type = Complex128,
+    verbose::Bool = false
 )
 
     residuals::Vector{real(T)} = []
@@ -70,7 +91,7 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
     schur = PartialSchur(zeros(T, n, pairs), zeros(T, pairs, pairs))
 
     # Current eigenvalue
-    θ = zero(T)
+    λ = zero(T)
 
     # Current residual vector
     r = Vector{T}(n)
@@ -80,13 +101,15 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
     harmonic_ritz_values::Vector{Vector{T}} = []
     converged_ritz_values::Vector{Vector{T}} = []
 
+    local F::GeneralizedSchur
+
     while k <= pairs && iter <= max_iter
         m += 1
 
         if iter == 1
             rand!(view(V, :, 1))
         else
-            solve_deflated_correction!(view(V, :, m), solver, A, θ, Q, r)
+            solve_deflated_correction!(view(V, :, m), solver, A, λ, schur.Q_all, r)
         end
 
         # Search space is orthonormalized
@@ -100,7 +123,7 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
         copy!(view(W, :, m), view(AV, :, m))
 
         # Orthogonalize w.r.t. the converged Schur vectors
-        just_orthogonalize!(view(Q, :, 1 : k), view(W, :, m), DGKS)
+        just_orthogonalize!(schur.Q_locked, view(W, :, m), DGKS)
 
         # Orthonormalize W[:, m] w.r.t. previous columns of W
         MA[m, m] = orthogonalize_and_normalize!(
@@ -111,10 +134,6 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
         )
 
         # Update the right-most column and last row of M = W' * V
-        # We can still save 1 inner product (right-bottom value is computed twice now)
-        # Ac_mul_B!(view(M, 1 : m, m), view(W, :, 1 : m), view(V, :, m))
-        # Ac_mul_B!(view(M, m, 1 : m), view(W, :, m), view(V, :, 1 : m))
-
         M[m, m] = dot(view(W, :, m), view(V, :, m))
         @inbounds for i = 1 : m - 1
             M[i, m] = dot(view(W, :, i), view(V, :, m))
@@ -124,45 +143,29 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
         # Assert orthogonality of V and W
         # Assert W * MA = (I - QQ') * (A - τI) * V
         # Assert that M = W' * V
-        # @assert norm(hcat(W[1 : m + 1]...)' * hcat(W[1 : m + 1]...) - eye(m + 1)) < 1e-12
-        # @assert norm(hcat(V[1 : m + 1]...)' * hcat(V[1 : m + 1]...) - eye(m + 1)) < 1e-12
-        # @assert norm(hcat(W[1 : m + 1]...) * MA[1 : m + 1, 1 : m + 1] - hcat(AV[1 : m + 1]...) + (Q[:, 1 : k] * (Q[:, 1 : k]' * hcat(AV[1 : m + 1]...)))) < pairs * ɛ
-        # @assert norm(M[1 : m + 1, 1 : m + 1] - hcat(W[1 : m + 1]...)' * hcat(V[1 : m + 1]...)) < 1e-12
-
-        # Finally increment the search space dimension
-
-        # F is the Schur decomp
-        # u is the approximate eigenvector
-        # rayleigh is the Rayleigh quotient: approx. shifted eigenvalue.
-        # r is its residual with Schur directions removed
-        # z is the projection of the residual on Q
+        @assert norm(W[:, 1 : m]' * W[:, 1 : m] - eye(m)) < 1e-12
+        @assert norm(V[:, 1 : m]' * V[:, 1 : m] - eye(m)) < 1e-12
+        @assert norm(W[:, 1 : m] * MA[1 : m, 1 : m] - AV[:, 1 : m] + (schur.Q_locked * (schur.Q_locked' * AV[:, 1 : m]))) < pairs * ɛ
+        @assert norm(M[1 : m, 1 : m] - W[:, 1 : m]' * V[:, 1 : m]) < 1e-12
 
         search = true
 
         while search
 
-            F, λ, r = extract_harmonic!(
-                view(MA, 1 : m, 1 : m), 
-                view(M, 1 : m, 1 : m), 
-                view(V, :, 1 : m), 
-                view(AV, :, 1 : m), 
-                schur,
-                τ,
-                T
-            )
-
+            F = schurfact(view(MA, 1 : m, 1 : m), view(M, 1 : m, 1 : m))
+            λ = extract_harmonic!(F, view(V, :, 1 : m), view(AV, :, 1 : m), r, schur, τ)
             resnorm = norm(r)
 
             # Convergence history of the harmonic Ritz values
             push!(harmonic_ritz_values, F.alpha ./ F.beta)
-            push!(converged_ritz_values, diag(view(R, 1 : k, 1 : k)))
+            push!(converged_ritz_values, diag(view(schur.R, 1 : k, 1 : k)))
             push!(residuals, norm(r))
 
             # An Ritz vector is converged
             if resnorm ≤ ɛ
-                println("Found an eigenvalue", λ)
+                println("Found an eigenvalue ", λ)
 
-                R[k + 1, k + 1] = λ # Eigenvalue
+                schur.R[k + 1, k + 1] = λ # Eigenvalue
                 k += 1
 
                 lock!(schur)
@@ -170,25 +173,15 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
                 # Add another one in the history
                 push!(converged_ritz_values[iter], λ)
 
-                # Make sure the Schur decomp AQ = QR is approximately correct
-                # @assert norm(A * @view(Q[:, k]) - @view(Q[:, 1 : k]) * @view(R[k, 1 : k])) < k * ɛ
-
                 # Are we done yet?
                 if k == pairs
                     return schur.Q, schur.R, harmonic_ritz_values, converged_ritz_values, residuals
                 end
 
-                # Now remove this eigenvector direction from the search space.
+                # Now remove this Schur vector from the search space.
 
                 # Shrink V, W and AV
-                A_mul_B!(view(large_matrix_tmp, :, 1 : m - 1), view(V, :, 1 : m), view(F[:right], :, 2 : m))
-                large_matrix_tmp, V = V, large_matrix_tmp
-
-                A_mul_B!(view(large_matrix_tmp, :, 1 : m - 1), view(AV, :, 1 : m), view(F[:right], :, 2 : m))
-                large_matrix_tmp, AV = AV, large_matrix_tmp
-
-                A_mul_B!(view(large_matrix_tmp, :, 1 : m - 1), view(W, :, 1 : m), view(F[:left], :, 2 : m))
-                large_matrix_tmp, W = W, large_matrix_tmp
+                shrink!(large_matrix_tmp, view(V, :, 1 : m), view(AV, :, 1 : m), view(W, :, 1 : m), F, 2 : m)
 
                 # Update the projection matrices M and MA.
                 copy!(view(M, 1 : m - 1, 1 : m - 1), view(F.T, 2 : m, 2 : m))
@@ -198,7 +191,7 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
 
                 # TODO: Can the search space become empty? Probably, but not likely.
                 if m == 0
-                    return Q[:, 1 : k], R[1 : k, 1 : k], harmonic_ritz_values, converged_ritz_values, residuals
+                    return schur.Q[:, 1 : k], schur.R[1 : k, 1 : k], harmonic_ritz_values, converged_ritz_values, residuals
                 end
             else
                 search = false
@@ -209,17 +202,9 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
             println("Shrinking the search space.")
 
             # Move min_dimension of the smallest harmonic Ritz values up front
-            schur_sort!(F, SM(), 1 : min_dimension)
-
-            # Shrink V, W, AV, and update M and MA.
-            A_mul_B!(view(large_matrix_tmp, :, 1 : min_dimension), V, view(F[:right], :, 1 : min_dimension))
-            large_matrix_tmp, V = V, large_matrix_tmp
-            
-            A_mul_B!(view(large_matrix_tmp, :, 1 : min_dimension), AV, view(F[:right], :, 1 : min_dimension))
-            large_matrix_tmp, AV = AV, large_matrix_tmp
-
-            A_mul_B!(view(large_matrix_tmp, :, 1 : min_dimension), W, view(F[:left], :, 1 : min_dimension))
-            large_matrix_tmp, W = W, large_matrix_tmp
+            keep = 1 : min_dimension
+            schur_sort!(SM(), F, keep)
+            shrink!(large_matrix_tmp, V, AV, W, F, keep)
 
             m = min_dimension
             copy!(view(M, 1 : m, 1 : m), view(F.T, 1 : m, 1 : m))
@@ -229,35 +214,48 @@ function jdqr_harmonic{Alg <: CorrectionSolver}(
         iter += 1
     end
 
-    Q[:, 1 : k], R[1 : k, 1 : k], harmonic_ritz_values, converged_ritz_values, residuals
-
+    schur.Q[:, 1 : k], schur.R[1 : k, 1 : k], harmonic_ritz_values, converged_ritz_values, residuals
 end
 
-function extract_harmonic!(MA, M, V, AV, schur, τ, T)
-  # Compute the Schur decomp to find the harmonic Ritz values
-  F = schurfact(MA, M)
+function shrink!(tmp, V, AV, W, F, range)
+    # Shrink V, W, AV, and update M and MA.
+    temporary = view(tmp, :, 1 : length(range))
+    
+    A_mul_B!(temporary, V, view(F[:right], :, range))
+    copy!(V, temporary)
+    
+    A_mul_B!(temporary, AV, view(F[:right], :, range))
+    copy!(AV, temporary)
 
-  # Move the smallest harmonic Ritz value up front
-  schur_sort!(F, SM(), 1)
+    A_mul_B!(temporary, W, view(F[:left], :, range))
+    copy!(W, temporary)
+end
 
-  # Pre-ritz vector
-  y = view(F.Z, :, 1)
+function extract_harmonic!(F::GeneralizedSchur, V, AV, r, schur, τ)
+    # Compute the Schur decomp to find the harmonic Ritz values
 
-  # Ritz vector
-  A_mul_B!(schur.curr, V, y)
+    # Move the smallest harmonic Ritz value up front
+    schur_sort!(SM(), F, 1)
 
-  # Rayleigh quotient = approx eigenvalue s.t. if r = (A-τI)u - rayleigh * u, then r ⟂ u
-  rayleigh = conj(F.beta[1]) * F.alpha[1]
-  
-  # Residual r = (A - τI)u - rayleigh * u = AV*y - rayleigh * u
-  A_mul_B!(r, AV, y)
-  axpy!(-rayleigh, u, r)
-  
-  # Orthogonalize w.r.t. Q
-  just_orthogonalize!(Q, r, DGKS)
-  
-  # Assert that the residual is perpendicular to the Ritz vector
-  # @assert abs(dot(r, u)) < ɛ
-  F, λ + τ, r
+    # Pre-ritz vector
+    y = view(F.Z, :, 1)
+
+    # Ritz vector
+    A_mul_B!(schur.Q_active, V, y)
+
+    # Rayleigh quotient λ = approx eigenvalue s.t. if r = (A-τI)u - λ * u, then r ⟂ u
+    λ = conj(F.beta[1]) * F.alpha[1]
+
+    # Residual r = (A - τI)u - λ * u = AV*y - λ * u
+    A_mul_B!(r, AV, y)
+    axpy!(-λ, schur.Q_active, r)
+
+    # Orthogonalize w.r.t. Q
+    just_orthogonalize!(schur.Q_locked, r, DGKS)
+
+    # Assert that the residual is perpendicular to the Ritz vector
+    # @assert abs(dot(r, schur.Q_active)) < 1e-5
+
+    λ + τ
 end
 

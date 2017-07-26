@@ -17,10 +17,12 @@ function generalized(; n = 1_000, target = Near(1.7 + 0.1im))
     target = target,
     pairs = 10,
     min_dimension = 10,
-    max_dimension = 20,
-    max_iter = 2000,
+    max_dimension = 15,
+    max_iter = 300,
     verbose = true
   )
+
+  return Z' * (A * Q), Z' * (B * Q), diag(S) ./ diag(T)
   
   found = diag(S) ./ diag(T)
 
@@ -75,7 +77,7 @@ function test_harmonic_2(n = 1000; τ = 1.52 + 0.0im)
   p1, p2
 end
 
-function test_harmonic(; n = 500, τ = 1.52 + 0.0im)
+function test_harmonic(; n = 500, τ = 0.01 + 0.02im)
   srand(4)
 
   A = spdiagm(
@@ -85,18 +87,18 @@ function test_harmonic(; n = 500, τ = 1.52 + 0.0im)
     (-1, 0, 1)
   )
 
-  λs = real(eigvals(full(A)))
-
   Q, R, ritz_hist, conv_hist, residuals = jdqr_harmonic(
     A,
     exact_solver(),
     pairs = 10,
-    min_dimension = 10,
-    max_dimension = 20,
+    min_dimension = 5,
+    max_dimension = 10,
     max_iter = 300,
     ɛ = 1e-5,
     τ = τ
   )
+
+  λs = real(eigvals(full(A)))
 
   # Total number of iterations
   iterations = length(ritz_hist)
