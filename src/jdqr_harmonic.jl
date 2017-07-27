@@ -69,6 +69,20 @@ function resize!(V::SubSpace, size::Int)
     V
 end
 
+"""
+Holds a small projected matrix = W'AV and a view `curr` to the currently active part.
+"""
+mutable struct ProjectedMatrix{matT <: StridedMatrix, matViewT <: StridedMatrix}
+    matrix::matT
+    curr::matViewT
+end
+
+ProjectedMatrix(M::StridedMatrix) = ProjectedMatrix(M, view(M, 1 : 0, 1 : 0))
+
+function resize!(M::ProjectedMatrix, size::Int)
+    M.curr = view(M.matrix, 1 : size, 1 : size)
+end
+
 function jdqr_harmonic(
     A,                       # Some square matrix
     solver::Alg;             # Solver for the correction equation
@@ -97,8 +111,8 @@ function jdqr_harmonic(
     temporary = zeros(T, n, max_dimension)
 
     # Projected matrices
-    MA = zeros(T, max_dimension, max_dimension)
-    M = zeros(T, max_dimension, max_dimension)
+    MA = ProjectedMatrix(zeros(T, max_dimension, max_dimension))
+    M = ProjectedMatrix(zeros(T, max_dimension, max_dimension))
 
     # k is the number of converged eigenpairs
     k = 0
@@ -127,6 +141,8 @@ function jdqr_harmonic(
         resize!(V, m)
         resize!(AV, m)
         resize!(W, m)
+        resize!(M, m)
+        resize!(MA, m)
 
         if iter == 1
             rand!(V.curr)
@@ -148,18 +164,18 @@ function jdqr_harmonic(
         just_orthogonalize!(schur.locked, W.curr, DGKS)
 
         # Orthonormalize W[:, m] w.r.t. previous columns of W
-        MA[m, m] = orthogonalize_and_normalize!(
+        MA.matrix[m, m] = orthogonalize_and_normalize!(
             W.prev,
             W.curr, 
-            view(MA, 1 : m - 1, m),
+            view(MA.matrix, 1 : m - 1, m),
             DGKS
         )
 
         # Update the right-most column and last row of M = W' * V
-        M[m, m] = dot(W.curr, V.curr)
+        M.matrix[m, m] = dot(W.curr, V.curr)
         @inbounds for i = 1 : m - 1
-            M[i, m] = dot(view(W.basis, :, i), V.curr)
-            M[m, i] = dot(W.curr, view(V.basis, :, i))
+            M.matrix[i, m] = dot(view(W.basis, :, i), V.curr)
+            M.matrix[m, i] = dot(W.curr, view(V.basis, :, i))
         end
 
         # Assert orthogonality of V and W
@@ -174,7 +190,7 @@ function jdqr_harmonic(
 
         while search
 
-            F = schurfact(view(MA, 1 : m, 1 : m), view(M, 1 : m, 1 : m))
+            F = schurfact(MA.curr, M.curr)
             λ = extract_harmonic!(F, V.all, AV.all, r, schur, τ)
             resnorm = norm(r)
 
@@ -190,12 +206,13 @@ function jdqr_harmonic(
                 verbose && println("Found an eigenvalue ", λ)
 
                 schur.R[k + 1, k + 1] = λ # Eigenvalue
-                k += 1
-
-                lock!(schur)
 
                 # Add another one in the history
                 push!(converged_ritz_values[iter], λ)
+
+                k += 1
+
+                lock!(schur)
 
                 # Are we done yet?
                 if k == pairs
@@ -209,17 +226,13 @@ function jdqr_harmonic(
                 shrink!(temporary, V, view(F[:right], :, keep), m - 1)
                 shrink!(temporary, AV, view(F[:right], :, keep), m - 1)
                 shrink!(temporary, W, view(F[:left], :, keep), m - 1)
-
-                # Update the projection matrices M and MA.
-                copy!(view(M, 1 : m - 1, 1 : m - 1), view(F.T, 2 : m, 2 : m))
-                copy!(view(MA, 1 : m - 1, 1 : m - 1), view(F.S, 2 : m, 2 : m))
+                shrink!(M, view(F.T, keep, keep), m - 1)
+                shrink!(MA, view(F.S, keep, keep), m - 1)
 
                 m -= 1
 
                 # TODO: Can the search space become empty? Probably, but not likely.
-                if m == 0
-                    return schur.Q[:, 1 : k], schur.R[1 : k, 1 : k], harmonic_ritz_values, converged_ritz_values, residuals
-                end
+                m == 0 && throw(ErrorException("Search space became empty: TODO."))
             else
                 search = false
             end
@@ -235,10 +248,9 @@ function jdqr_harmonic(
             shrink!(temporary, V, view(F[:right], :, keep), min_dimension)
             shrink!(temporary, AV, view(F[:right], :, keep), min_dimension)
             shrink!(temporary, W, view(F[:left], :, keep), min_dimension)
-
+            shrink!(M, view(F.T, 1 : min_dimension, 1 : min_dimension), min_dimension)
+            shrink!(MA, view(F.S, 1 : min_dimension, 1 : min_dimension), min_dimension)
             m = min_dimension
-            copy!(view(M, 1 : m, 1 : m), view(F.T, 1 : m, 1 : m))
-            copy!(view(MA, 1 : m, 1 : m), view(F.S, 1 : m, 1 : m))
         end
 
         iter += 1
@@ -252,6 +264,11 @@ function shrink!(temporary, subspace::SubSpace, combination::StridedMatrix, dime
     A_mul_B!(tmp, subspace.all, combination)
     copy!(subspace.all, tmp)
     resize!(subspace, dimension)
+end
+
+function shrink!(M::ProjectedMatrix, replacement, dimension)
+    copy!(view(M.matrix, 1 : dimension, 1 : dimension), replacement)
+    resize!(M, dimension)
 end
 
 function extract_harmonic!(F::GeneralizedSchur, V, AV, r, schur, τ)
