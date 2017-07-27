@@ -2,14 +2,14 @@ export DGKS, ClassicalGramSchmidt, ModifiedGramSchmidt
 export orthogonalize_and_normalize!
 
 abstract type OrthogonalizationMethod end
-immutable DGKS <: OrthogonalizationMethod end
-immutable ClassicalGramSchmidt <: OrthogonalizationMethod end
-immutable ModifiedGramSchmidt <: OrthogonalizationMethod end
+struct DGKS <: OrthogonalizationMethod end
+struct ClassicalGramSchmidt <: OrthogonalizationMethod end
+struct ModifiedGramSchmidt <: OrthogonalizationMethod end
 
 # Default to MGS, good enough for solving linear systems.
-@inline orthogonalize_and_normalize!{T}(V::StridedMatrix{T}, w::StridedVector{T}, h::StridedVector{T}) = orthogonalize_and_normalize!(V, w, h, ModifiedGramSchmidt)
+@inline orthogonalize_and_normalize!(V::StridedMatrix{T}, w::StridedVector{T}, h::StridedVector{T}) where {T} = orthogonalize_and_normalize!(V, w, h, ModifiedGramSchmidt)
 
-function orthogonalize_and_normalize!{T}(V::StridedMatrix{T}, w::StridedVector{T}, h::StridedVector{T}, ::Type{DGKS})
+function orthogonalize_and_normalize!(V::StridedMatrix{T}, w::StridedVector{T}, h::StridedVector{T}, ::Type{DGKS}) where {T}
     # Orthogonalize using BLAS-2 ops
     Ac_mul_B!(h, V, w)
     BLAS.gemv!('N', -one(T), V, h, one(T), w)
@@ -37,7 +37,7 @@ function orthogonalize_and_normalize!{T}(V::StridedMatrix{T}, w::StridedVector{T
     nrm
 end
 
-function orthogonalize_and_normalize!{T}(V::StridedMatrix{T}, w::StridedVector{T}, h::StridedVector{T}, ::Type{ClassicalGramSchmidt})
+function orthogonalize_and_normalize!(V::StridedMatrix{T}, w::StridedVector{T}, h::StridedVector{T}, ::Type{ClassicalGramSchmidt}) where {T}
     # Orthogonalize using BLAS-2 ops
     Ac_mul_B!(h, V, w)
     BLAS.gemv!('N', -one(T), V, h, one(T), w)
@@ -49,7 +49,7 @@ function orthogonalize_and_normalize!{T}(V::StridedMatrix{T}, w::StridedVector{T
     nrm
 end
 
-function orthogonalize_and_normalize!{T}(V::StridedMatrix{T}, w::StridedVector{T}, h::StridedVector{T}, ::Type{ModifiedGramSchmidt})
+function orthogonalize_and_normalize!(V::StridedMatrix{T}, w::StridedVector{T}, h::StridedVector{T}, ::Type{ModifiedGramSchmidt}) where {T}
     # Orthogonalize using BLAS-1 ops and column views.
     for i = 1 : size(V, 2)
         column = view(V, :, i)
@@ -63,7 +63,7 @@ function orthogonalize_and_normalize!{T}(V::StridedMatrix{T}, w::StridedVector{T
     nrm
 end
 
-function just_orthogonalize!{T}(V::StridedMatrix{T}, w::StridedVector{T}, ::Type{DGKS})
+function just_orthogonalize!(V::StridedMatrix{T}, w::StridedVector{T}, ::Type{DGKS}) where {T}
     # Orthogonalize using BLAS-2 ops
     h = Ac_mul_B(V, w)
     BLAS.gemv!('N', -one(T), V, h, one(T), w)
@@ -88,7 +88,7 @@ function just_orthogonalize!{T}(V::StridedMatrix{T}, w::StridedVector{T}, ::Type
     nothing
 end
 
-function just_orthogonalize!{T}(V::StridedMatrix{T}, w::StridedVector{T}, h::StridedVector{T}, ::Type{DGKS})
+function just_orthogonalize!(V::StridedMatrix{T}, w::StridedVector{T}, h::StridedVector{T}, ::Type{DGKS}) where {T}
     # Orthogonalize using BLAS-2 ops
     Ac_mul_B!(h, V, w)
     BLAS.gemv!('N', -one(T), V, h, one(T), w)
