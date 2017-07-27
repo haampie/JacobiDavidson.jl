@@ -168,12 +168,7 @@ function jdqr(
         just_orthogonalize!(schur.locked, W.curr, DGKS)
 
         # Orthonormalize W[:, m] w.r.t. previous columns of W
-        MA.matrix[m, m] = orthogonalize_and_normalize!(
-            W.prev,
-            W.curr, 
-            view(MA.matrix, 1 : m - 1, m),
-            DGKS
-        )
+        MA.matrix[m, m] = orthogonalize_and_normalize!(W.prev, W.curr, view(MA.matrix, 1 : m - 1, m), DGKS)
 
         # Update the right-most column and last row of M = W' * V
         M.matrix[m, m] = dot(W.curr, V.curr)
