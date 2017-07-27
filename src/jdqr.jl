@@ -96,6 +96,7 @@ function jdqr(
     verbose::Bool = false
 ) where {Alg <: CorrectionSolver}
 
+    solver_reltol = one(real(T))
     residuals::Vector{real(T)} = []
 
     n = size(A, 1)
@@ -136,6 +137,8 @@ function jdqr(
     local F::GeneralizedSchur
 
     while k ≤ pairs && iter ≤ max_iter
+        solver_reltol /= 2
+
         m += 1
 
         resize!(V, m)
@@ -147,7 +150,7 @@ function jdqr(
         if iter == 1
             rand!(V.curr)
         else
-            solve_deflated_correction!(V.curr, solver, A, λ, schur.all, r)
+            solve_deflated_correction!(solver, A, V.curr, schur.all, λ, r, solver_reltol)
         end
 
         # Search space is orthonormalized
@@ -226,6 +229,8 @@ function jdqr(
 
                 # TODO: Can the search space become empty? Probably, but not likely.
                 m == 0 && throw(ErrorException("Search space became empty: TODO."))
+
+                solver_reltol = one(real(T))
             else
                 search = false
             end

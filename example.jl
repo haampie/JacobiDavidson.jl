@@ -89,7 +89,7 @@ function test_harmonic(; n = 500, τ = 0.01 + 0.02im)
 
   schur, ritz_hist, conv_hist, residuals = jdqr(
     A,
-    exact_solver(),
+    bicgstabl_solver(A, max_mv_products = 30, l = 2), 
     pairs = 10,
     min_dimension = 5,
     max_dimension = 10,
