@@ -95,7 +95,8 @@ function test_harmonic(; n = 500, τ = 0.01 + 0.02im)
     max_dimension = 10,
     max_iter = 300,
     ɛ = 1e-5,
-    τ = τ
+    τ = τ,
+    verbose = true
   )
 
   λs = real(eigvals(full(A)))
