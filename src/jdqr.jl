@@ -1,4 +1,4 @@
-export jdqr_harmonic
+export jdqr
 
 import Base.LinAlg.GeneralizedSchur
 
@@ -83,7 +83,7 @@ function resize!(M::ProjectedMatrix, size::Int)
     M.curr = view(M.matrix, 1 : size, 1 : size)
 end
 
-function jdqr_harmonic(
+function jdqr(
     A,                       # Some square matrix
     solver::Alg;             # Solver for the correction equation
     pairs::Int = 5,          # Number of eigenpairs wanted

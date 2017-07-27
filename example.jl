@@ -87,7 +87,7 @@ function test_harmonic(; n = 500, τ = 0.01 + 0.02im)
     (-1, 0, 1)
   )
 
-  Q, R, ritz_hist, conv_hist, residuals = jdqr_harmonic(
+  schur, ritz_hist, conv_hist, residuals = jdqr(
     A,
     exact_solver(),
     pairs = 10,
@@ -105,7 +105,7 @@ function test_harmonic(; n = 500, τ = 0.01 + 0.02im)
   iterations = length(ritz_hist)
 
   @show iterations
-  @show diag(R)
+  @show schur.values
 
   # Plot the target as a horizontal line
   p = plot([0.0, iterations + 1.0], [real(τ), real(τ)], linewidth=5, legend = :none, layout = (2, 1))

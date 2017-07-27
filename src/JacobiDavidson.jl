@@ -11,7 +11,7 @@ include("solvers/gmres.jl")
 include("correction_eqn_solvers.jl")
 include("orthogonalization.jl")
 include("eigenvalue_targets.jl")
-include("jdqr_harmonic.jl")
+include("jdqr.jl")
 include("jdqz.jl")
 
 end
