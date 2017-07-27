@@ -141,6 +141,7 @@ function jdqr(
 
         m += 1
 
+        ### Expand
         resize!(V, m)
         resize!(AV, m)
         resize!(W, m)
@@ -191,6 +192,7 @@ function jdqr(
 
         search = true
 
+        ### Extract
         while search
 
             F = schurfact(MA.curr, M.curr)
@@ -236,6 +238,7 @@ function jdqr(
             end
         end
 
+        ### Restart
         if m == max_dimension
             verbose && println("Shrinking the search space.")
 
