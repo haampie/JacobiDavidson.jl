@@ -1,4 +1,6 @@
 # Identity preconditioner
+export Identity
+
 struct Identity end
 
 Base.:\(::Identity, x) = copy(x)

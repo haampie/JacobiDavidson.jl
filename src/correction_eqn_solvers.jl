@@ -94,7 +94,7 @@ function solve_deflated_correction!(solver::bicgstabl_solver, A, x, Q, θ, r::Ab
     nothing
 end
 
-function solve_generalized_correction_equation!(solver::exact_solver, A, B, x, Q, Z, QZ, ζ, η, r, spare_vector, tol)
+function solve_generalized_correction_equation!(solver::exact_solver, A, B, preconditioner, x, Q, Z, precZ, QZ, ζ, η, r, spare_vector, tol)
   n = size(A, 1)
   m = size(Q, 2)
   # Assuming both A and B are sparse while Q and Z are dense, let's try to avoid constructing a huge dense matrix.
@@ -120,9 +120,13 @@ struct QZpreconditioner{T}
     Q
     Z
     QZ
+    preconditioner
 end
 
 function A_ldiv_B!(QZ::QZpreconditioner{T}, x) where {T}
+    # x ← preconditioner \ x
+    A_ldiv_B!(QZ.preconditioner, x)
+    
     # x ← (I - Z inv(Q'Z) Q')x
     h = Ac_mul_B(QZ.Q, x)
     A_ldiv_B!(QZ.QZ.LU, h)
@@ -135,12 +139,12 @@ this is simplified in Krylov subspaces as solving
 (ηA - ζB)t = b
 with the left preconditioner Pl = (I - Z inv(Q'Z) Q')
 """
-function solve_generalized_correction_equation!(solver::gmres_solver, A, B, x, Q, Z, QZ, ζ, η, r, spare_vector, tol)
+function solve_generalized_correction_equation!(solver::gmres_solver, A, B, preconditioner, x, Q, Z, precZ, QZ, ζ, η, r, spare_vector, tol)
 
     n = size(A, 1)
     T = eltype(x)
 
-    Pl = QZpreconditioner{T}(Q, Z, QZ)
+    Pl = QZpreconditioner{T}(Q, precZ, QZ, preconditioner)
 
     Ax_minus_Bx = LinearMap{T}((y, x) -> begin
         # y = (ηA - ζB) * x
@@ -157,11 +161,11 @@ function solve_generalized_correction_equation!(solver::gmres_solver, A, B, x, Q
     copy!(x, iterable.x)
 end
 
-function solve_generalized_correction_equation!(solver::bicgstabl_solver, A, B, x, Q, Z, QZ, ζ, η, r, spare_vector, tol)
+function solve_generalized_correction_equation!(solver::bicgstabl_solver, A, B, preconditioner, x, Q, Z, precZ, QZ, ζ, η, r, spare_vector, tol)
     n = size(A, 1)
     T = eltype(x)
 
-    Pl = QZpreconditioner{T}(Q, Z, QZ)
+    Pl = QZpreconditioner{T}(Q, precZ, QZ, preconditioner)
 
     Ax_minus_Bx = LinearMap{T}((y, x) -> begin
         # y = (ηA - ζB) * x

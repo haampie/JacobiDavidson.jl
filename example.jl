@@ -4,6 +4,61 @@ using Plots
 using JacobiDavidson
 using LinearMaps
 
+import Base.LinAlg.A_ldiv_B!
+
+function myA!(y, x)
+  for i = 1 : length(x)
+    @inbounds y[i] = i * x[i]
+  end
+end
+
+function myB!(y, x)
+  for i = 1 : length(x)
+    @inbounds y[i] = x[i] / i
+  end
+end
+
+struct SuperPreconditioner
+  target::Float64
+end
+
+function A_ldiv_B!(p::SuperPreconditioner, x)
+  for i = 1 : length(x)
+    @inbounds x[i] = x[i] * i / (i * i - p.target)
+  end
+end
+
+function another_example(; n = 100, target = Near(31.0 + 0im))
+  A = LinearMap{Float64}(myA!, n; ismutating = true)
+  B = LinearMap{Float64}(myB!, n; ismutating = true)
+  P = SuperPreconditioner(target.τ)
+
+  Q, Z, S, T, residuals = jdqz(
+    A, B, bicgstabl_solver(A, max_mv_products = 100, l = 2),
+    preconditioner = P,
+    target = target,
+    pairs = 5,
+    min_dimension = 10,
+    max_dimension = 20,
+    max_iter = 300,
+    verbose = true
+  )
+
+  Q2, Z2, S2, T2, residuals2 = jdqz(
+    A, B, bicgstabl_solver(A, max_mv_products = 100, l = 2),
+    preconditioner = Identity(),
+    target = target,
+    pairs = 5,
+    min_dimension = 10,
+    max_dimension = 20,
+    max_iter = 300,
+    verbose = true
+  )
+
+  plot(residuals, yscale = :log10, label = "With preconditioner", marker = :x)
+  plot!(residuals2, yscale = :log10, label = "Without preconditioner", marker = :x)
+end
+
 function generalized(; n = 1_000, target = Near(1.7 + 0.1im))
   srand(50)
   A = 2 * speye(Complex128, n) + sprand(Complex128, n, n, 1 / n)
@@ -12,8 +67,9 @@ function generalized(; n = 1_000, target = Near(1.7 + 0.1im))
   values = eigvals(full(A), full(B))
 
   @time Q, Z, S, T, residuals = jdqz(
-    A, B, 
-    bicgstabl_solver(A, max_mv_products = 100, l = 2), 
+    A, B,
+    bicgstabl_solver(A, max_mv_products = 100, l = 2),
+    preconditioner = Identity(),
     target = target,
     pairs = 10,
     min_dimension = 10,
@@ -21,8 +77,6 @@ function generalized(; n = 1_000, target = Near(1.7 + 0.1im))
     max_iter = 300,
     verbose = true
   )
-
-  return Z' * (A * Q), Z' * (B * Q), diag(S) ./ diag(T)
   
   found = diag(S) ./ diag(T)
 

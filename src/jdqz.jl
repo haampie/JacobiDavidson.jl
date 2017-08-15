@@ -12,6 +12,7 @@ function jdqz(
     A,
     B,
     solver::Alg;             # Solver for the correction equation
+    preconditioner = Identity(),
     pairs::Int = 5,          # Number of eigenpairs wanted
     min_dimension::Int = 10, # Minimal search space size
     max_dimension::Int = 20, # Maximal search space size
@@ -43,6 +44,9 @@ function jdqz(
     S = zeros(numT, pairs, pairs)
     T = zeros(numT, pairs, pairs)
 
+    # Preconditioned Z
+    precZ = zeros(numT, n, pairs)
+
     # Low-dimensional projections: MA = W'AV, MB = W'BV
     MA = zeros(numT, max_dimension, max_dimension)
     MB = zeros(numT, max_dimension, max_dimension)
@@ -61,7 +65,8 @@ function jdqz(
     
     large_matrix_tmp = zeros(numT, n, max_dimension)
 
-    # QZ = Q' * Z, which is used in the correction equation. QZ_inv = lufact!(copy!(QZ_inv, QZ))
+    # QZ = Q' * (preconditioner \ Z), which is used in the correction equation. 
+    # QZ_inv = lufact!(copy!(QZ_inv, QZ))
     QZ = QZ_product(
         zeros(numT, pairs, pairs),
         zeros(numT, pairs, pairs),
@@ -87,7 +92,7 @@ function jdqz(
         if iter == 1
             rand!(view(V, :, 1)) # Initialize with a random vector
         else
-            solve_generalized_correction_equation!(solver, A, B, view(V, :, m + 1), view(Q, :, 1 : k + 1), view(Z, :, 1 : k + 1), QZ, ζ, η, r, spare_vector, solver_reltol)
+            solve_generalized_correction_equation!(solver, A, B, preconditioner, view(V, :, m + 1), view(Q, :, 1 : k + 1), view(Z, :, 1 : k + 1), view(precZ, :, 1 : k + 1), QZ, ζ, η, r, spare_vector, solver_reltol)
         end
 
         m += 1
@@ -147,7 +152,12 @@ function jdqz(
                 spare_vector
             )
 
-            update_qz!(QZ, Q, Z, k + 1)
+            # Update last column of precZ = preconditioner \ Z
+            copy!(view(precZ, :, k + 1), view(Z, :, k + 1))
+            A_ldiv_B!(preconditioner, view(precZ, :, k + 1))
+
+            # Update the product Q' * precZ
+            update_qz!(QZ, Q, precZ, k + 1)
 
             resnorm = norm(r)
 
@@ -268,7 +278,8 @@ end
 
 """
 Updates the last row and column of QZ = Q' * Z
-and computes the LU factorization of QZ
+and computes the LU factorization of QZ. Z can
+be preconditioned.
 """
 function update_qz!(QZ, Q, Z, k)
     for i = 1 : k
