@@ -6,57 +6,59 @@ using LinearMaps
 
 import Base.LinAlg.A_ldiv_B!
 
-function myA!(y, x)
+function myA!(y::AbstractVector{T}, x::AbstractVector{T}) where {T<:Number}
   for i = 1 : length(x)
-    @inbounds y[i] = i * x[i]
+    @inbounds y[i] = sqrt(i) * x[i]
   end
 end
 
-function myB!(y, x)
+function myB!(y::AbstractVector{T}, x::AbstractVector{T}) where {T<:Number}
   for i = 1 : length(x)
-    @inbounds y[i] = x[i] / i
+    @inbounds y[i] = x[i] / sqrt(i)
   end
 end
 
-struct SuperPreconditioner
-  target::Float64
+struct SuperPreconditioner{numT <: Number}
+  target::numT
 end
 
-function A_ldiv_B!(p::SuperPreconditioner, x)
+function A_ldiv_B!(p::SuperPreconditioner{T}, x::AbstractVector{T}) where {T<:Number}
   for i = 1 : length(x)
-    @inbounds x[i] = x[i] * i / (i * i - p.target)
+    @inbounds x[i] = x[i] * sqrt(i) / (i - p.target)
   end
 end
 
-function another_example(; n = 100, target = Near(31.0 + 0im))
+function another_example(; n = 1000, target = Near(31.0 + 0im))
   A = LinearMap{Float64}(myA!, n; ismutating = true)
   B = LinearMap{Float64}(myB!, n; ismutating = true)
   P = SuperPreconditioner(target.τ)
 
+  # Q2, Z2, S2, T2, residuals2 = jdqz(
+  #   A, B, bicgstabl_solver(A, max_mv_products = 100, l = 2),
+  #   preconditioner = Identity(),
+  #   target = target,
+  #   pairs = 5,
+  #   ɛ = 1e-9,
+  #   min_dimension = 10,
+  #   max_dimension = 20,
+  #   max_iter = 100,
+  #   verbose = false
+  # )
+
   Q, Z, S, T, residuals = jdqz(
-    A, B, bicgstabl_solver(A, max_mv_products = 100, l = 2),
+    A, B, bicgstabl_solver(A, max_mv_products = 10, l = 2),
     preconditioner = P,
     target = target,
     pairs = 5,
+    ɛ = 1e-9,
     min_dimension = 10,
     max_dimension = 20,
-    max_iter = 300,
-    verbose = true
-  )
-
-  Q2, Z2, S2, T2, residuals2 = jdqz(
-    A, B, bicgstabl_solver(A, max_mv_products = 100, l = 2),
-    preconditioner = Identity(),
-    target = target,
-    pairs = 5,
-    min_dimension = 10,
-    max_dimension = 20,
-    max_iter = 300,
+    max_iter = 100,
     verbose = true
   )
 
   plot(residuals, yscale = :log10, label = "With preconditioner", marker = :x)
-  plot!(residuals2, yscale = :log10, label = "Without preconditioner", marker = :x)
+  # plot!(residuals2, yscale = :log10, label = "Without preconditioner", marker = :x)
 end
 
 function generalized(; n = 1_000, target = Near(1.7 + 0.1im))
