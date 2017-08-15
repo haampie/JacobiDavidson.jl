@@ -52,12 +52,12 @@ function jdqz(
     # Orthonormal test subspace
     # AV will store A*V, without any orthogonalization
     # BV will store B*V, without any orthogonalization
-    # large_matrix_tmp is just a temporary
+    # temporary is just a temporary
     V = SubSpace(zeros(numT, n, max_dimension))
     W = SubSpace(zeros(numT, n, max_dimension))
     AV = SubSpace(zeros(numT, n, max_dimension))
     BV = SubSpace(zeros(numT, n, max_dimension))
-    large_matrix_tmp = zeros(numT, n, max_dimension)
+    temporary = zeros(numT, n, max_dimension)
 
     # QZ = Q' * (preconditioner \ Z), which is used in the correction equation. 
     # QZ_inv = lufact!(copy!(QZ_inv, QZ))
@@ -98,8 +98,6 @@ function jdqz(
             solve_generalized_correction_equation!(solver, A, B, preconditioner, V.curr, schur.Q.all, schur.Z.all, precZ.all, QZ, ζ, η, r, spare_vector, solver_reltol)
         end
 
-        m += 1
-
         # Orthogonalize V[:, m] against the search subspace
         orthogonalize_and_normalize!(V.prev, V.curr, zeros(numT, m - 1), DGKS)
 
@@ -110,7 +108,7 @@ function jdqz(
         # W.curr = ν * AV + μ * BV
         copy!(W.curr, AV.curr)
         scale!(W.curr, ν)
-        axpy!(μ, BV.curr, w)
+        axpy!(μ, BV.curr, W.curr)
 
         # Orthogonalize w against the Schur vectors Z
         just_orthogonalize!(schur.Z.prev, W.curr, DGKS)
@@ -135,21 +133,14 @@ function jdqz(
         while should_extract
             F = schurfact(MA.curr, MB.curr)
             
-            ζ, η = extract_generalized!(F, V, W,
-                AV,
-                BV,
-                schur,
-                r,
-                target,
-                spare_vector
-            )
+            ζ, η = extract_generalized!(F, V, W, AV, BV, schur, r, target, spare_vector)
 
             # Update last column of precZ = preconditioner \ Z
             copy!(precZ.curr, schur.Z.curr)
             A_ldiv_B!(preconditioner, precZ.curr)
 
             # Update the product Q' * precZ
-            update_qz!(QZ, Q, precZ, k + 1)
+            update_qz!(QZ, schur.Q, precZ, k + 1)
 
             resnorm = norm(r)
 
@@ -173,7 +164,8 @@ function jdqz(
                     return schur, residuals
                 end
 
-                resize!(schur, k)
+                resize!(schur, k + 1)
+                resize!(precZ, k + 1)
 
                 # Reset the iterative solver tolerance
                 solver_reltol = one(real(numT))
@@ -181,10 +173,10 @@ function jdqz(
                 # Remove the eigenvalue from the search subspace.
                 # Shrink V, W, AV, and BV
                 keep = 2 : m
-                shrink!(large_matrix_tmp, V, view(F[:right], :, keep), m - 1)
-                shrink!(large_matrix_tmp, AV, view(F[:right], :, keep), m - 1)
-                shrink!(large_matrix_tmp, BV, view(F[:right], :, keep), m - 1)
-                shrink!(large_matrix_tmp, W, view(F[:left], :, keep), m - 1)
+                shrink!(temporary, V, view(F[:right], :, keep), m - 1)
+                shrink!(temporary, AV, view(F[:right], :, keep), m - 1)
+                shrink!(temporary, BV, view(F[:right], :, keep), m - 1)
+                shrink!(temporary, W, view(F[:left], :, keep), m - 1)
 
                 # Update the projection matrices M and MA.
                 shrink!(MA, view(F.S, keep, keep), m - 1)
@@ -210,7 +202,7 @@ function jdqz(
             shrink!(temporary, V, view(F[:right], :, keep), min_dimension)
             shrink!(temporary, AV, view(F[:right], :, keep), min_dimension)
             shrink!(temporary, BV, view(F[:right], :, keep), min_dimension)
-            shrink!(temporary, W, view(F[:left], :, keep), min_dimension).
+            shrink!(temporary, W, view(F[:left], :, keep), min_dimension)
             shrink!(MA, view(F.S, keep, keep), min_dimension)
             shrink!(MB, view(F.T, keep, keep), min_dimension)
             m = min_dimension

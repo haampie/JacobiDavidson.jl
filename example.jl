@@ -45,7 +45,7 @@ function another_example(; n = 1000, target = Near(31.0 + 0im))
   #   verbose = false
   # )
 
-  Q, Z, S, T, residuals = jdqz(
+  schur, residuals = jdqz(
     A, B, bicgstabl_solver(A, max_mv_products = 10, l = 2),
     preconditioner = P,
     target = target,
