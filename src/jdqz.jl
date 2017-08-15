@@ -39,30 +39,24 @@ function jdqz(
 
     # Holds the final partial, generalized Schur decomposition where
     # AQ = ZS and BQ = ZT, with Q, Z orthonormal and S, T upper triangular.
-    Q = zeros(numT, n, pairs)
-    Z = zeros(numT, n, pairs)
-    S = zeros(numT, pairs, pairs)
-    T = zeros(numT, pairs, pairs)
+    schur = PartialGeneralizedSchur(zeros(numT, n, pairs), zeros(numT, n, pairs), numT)
 
     # Preconditioned Z
-    precZ = zeros(numT, n, pairs)
+    precZ = SubSpace(zeros(numT, n, pairs))
 
     # Low-dimensional projections: MA = W'AV, MB = W'BV
-    MA = zeros(numT, max_dimension, max_dimension)
-    MB = zeros(numT, max_dimension, max_dimension)
+    MA = ProjectedMatrix(zeros(numT, max_dimension, max_dimension))
+    MB = ProjectedMatrix(zeros(numT, max_dimension, max_dimension))
 
     # Orthonormal search subspace
-    V = zeros(numT, n, max_dimension)
-    
     # Orthonormal test subspace
-    W = zeros(numT, n, max_dimension)
-
     # AV will store A*V, without any orthogonalization
-    AV = zeros(numT, n, max_dimension)
-
     # BV will store B*V, without any orthogonalization
-    BV = zeros(numT, n, max_dimension)
-    
+    # large_matrix_tmp is just a temporary
+    V = SubSpace(zeros(numT, n, max_dimension))
+    W = SubSpace(zeros(numT, n, max_dimension))
+    AV = SubSpace(zeros(numT, n, max_dimension))
+    BV = SubSpace(zeros(numT, n, max_dimension))
     large_matrix_tmp = zeros(numT, n, max_dimension)
 
     # QZ = Q' * (preconditioner \ Z), which is used in the correction equation. 
@@ -89,72 +83,70 @@ function jdqz(
     while k ≤ pairs && iter ≤ max_iter
         solver_reltol /= 2
 
+        m += 1
+
+        resize!(V, m)
+        resize!(AV, m)
+        resize!(BV, m)
+        resize!(W, m)
+        resize!(MA, m)
+        resize!(MB, m)
+
         if iter == 1
-            rand!(view(V, :, 1)) # Initialize with a random vector
+            rand!(V.curr) # Initialize with a random vector
         else
-            solve_generalized_correction_equation!(solver, A, B, preconditioner, view(V, :, m + 1), view(Q, :, 1 : k + 1), view(Z, :, 1 : k + 1), view(precZ, :, 1 : k + 1), QZ, ζ, η, r, spare_vector, solver_reltol)
+            solve_generalized_correction_equation!(solver, A, B, preconditioner, V.curr, schur.Q.all, schur.Z.all, precZ.all, QZ, ζ, η, r, spare_vector, solver_reltol)
         end
 
         m += 1
 
         # Orthogonalize V[:, m] against the search subspace
-        orthogonalize_and_normalize!(
-            view(V, :, 1 : m - 1),
-            view(V, :, m),
-            zeros(numT, m - 1),
-            DGKS
-        )
+        orthogonalize_and_normalize!(V.prev, V.curr, zeros(numT, m - 1), DGKS)
 
         # AV = A*V and BV = B*V
-        A_mul_B!(view(AV, :, m), A, view(V, :, m))
-        A_mul_B!(view(BV, :, m), B, view(V, :, m))
+        A_mul_B!(AV.curr, A, V.curr)
+        A_mul_B!(BV.curr, B, V.curr)
 
-        # w = ν * AV + μ * BV
-        w = view(W, :, m)
-        copy!(w, view(AV, :, m))
-        scale!(w, ν)
-        axpy!(μ, view(BV, :, m), w)
+        # W.curr = ν * AV + μ * BV
+        copy!(W.curr, AV.curr)
+        scale!(W.curr, ν)
+        axpy!(μ, BV.curr, w)
 
         # Orthogonalize w against the Schur vectors Z
-        just_orthogonalize!(view(Z, :, 1 : k), w, DGKS)
+        just_orthogonalize!(schur.Z.prev, W.curr, DGKS)
 
-        # Make w orthonormal w.r.t. W
-        orthogonalize_and_normalize!(view(W, :, 1 : m - 1), w, zeros(numT, m - 1), DGKS)
+        # Make W.curr orthonormal w.r.t. W.prev
+        orthogonalize_and_normalize!(W.prev, W.curr, zeros(numT, m - 1), DGKS)
 
-        # Update the last row and column of MA = W' * A * V
-        Ac_mul_B!(view(MA, 1 : m, m), view(W, :, 1 : m), view(AV, :, m))
-        @inbounds for i = 1 : m - 1
-            MA[m, i] = dot(view(W, :, m), view(AV, :, i))
-        end
-
+        # Update MA = W' * A * V
         # Update MB = W' * B * V
-        Ac_mul_B!(view(MB, 1 : m, m), view(W, :, 1 : m), view(BV, :, m))
+        MA.matrix[m, m] = dot(W.curr, AV.curr)
+        MB.matrix[m, m] = dot(W.curr, BV.curr)
         @inbounds for i = 1 : m - 1
-            MB[m, i] = dot(view(W, :, m), view(BV, :, i))
+            MA.matrix[i, m] = dot(view(W.basis, :, i), AV.curr)
+            MA.matrix[m, i] = dot(W.curr, view(AV.basis, :, i))
+            MB.matrix[i, m] = dot(view(W.basis, :, i), BV.curr)
+            MB.matrix[m, i] = dot(W.curr, view(BV.basis, :, i))
         end
 
         # Extract a Petrov pair = approximate Schur pair.
         should_extract = true
 
         while should_extract
-            F, ζ, η = extract_generalized!(
-                view(MA, 1 : m, 1 : m),
-                view(MB, 1 : m, 1 : m),
-                view(V, :, 1 : m),
-                view(W, :, 1 : m),
-                view(AV, :, 1 : m),
-                view(BV, :, 1 : m),
-                view(Z, :, 1 : k),
-                view(Q, :, k + 1), # approximate schur vec
-                view(Z, :, k + 1), # other approx schur vec
+            F = schurfact(MA.curr, MB.curr)
+            
+            ζ, η = extract_generalized!(F, V, W,
+                AV,
+                BV,
+                schur,
                 r,
                 target,
                 spare_vector
             )
 
             # Update last column of precZ = preconditioner \ Z
-            copy!(view(precZ, :, k + 1), view(Z, :, k + 1))
-            A_ldiv_B!(preconditioner, view(precZ, :, k + 1))
+            copy!(precZ.curr, schur.Z.curr)
+            A_ldiv_B!(preconditioner, precZ.curr)
 
             # Update the product Q' * precZ
             update_qz!(QZ, Q, precZ, k + 1)
@@ -170,39 +162,33 @@ function jdqz(
                 verbose && println("Found an eigenvalue: ", ζ / η)
 
                 # Store the eigenvalue (do this in-place?)
-                S[k + 1, k + 1] = ζ
-                T[k + 1, k + 1] = η
-
-                # Reset the iterative solver tolerance
-                solver_reltol = one(real(numT))
+                push!(schur.alphas, ζ)
+                push!(schur.betas, η)
 
                 # One more eigenpair converged, yay.
                 k += 1
 
                 # Was this the last eigenpair?
                 if k == pairs
-                    return Q, Z, S, T, residuals
+                    return schur, residuals
                 end
 
+                resize!(schur, k)
+
+                # Reset the iterative solver tolerance
+                solver_reltol = one(real(numT))
+
                 # Remove the eigenvalue from the search subspace.
-                # Shrink V, W, AV, and BV (can be done in-place; but probably not worth it)
-                A_mul_B!(view(large_matrix_tmp, :, 1 : m - 1), view(V, :, 1 : m), view(F[:right], :, 2 : m))
-                V, large_matrix_tmp = large_matrix_tmp, V
+                # Shrink V, W, AV, and BV
+                keep = 2 : m
+                shrink!(large_matrix_tmp, V, view(F[:right], :, keep), m - 1)
+                shrink!(large_matrix_tmp, AV, view(F[:right], :, keep), m - 1)
+                shrink!(large_matrix_tmp, BV, view(F[:right], :, keep), m - 1)
+                shrink!(large_matrix_tmp, W, view(F[:left], :, keep), m - 1)
 
-                A_mul_B!(view(large_matrix_tmp, :, 1 : m - 1), view(AV, :, 1 : m), view(F[:right], :, 2 : m))
-                AV, large_matrix_tmp = large_matrix_tmp, AV
-
-                A_mul_B!(view(large_matrix_tmp, :, 1 : m - 1), view(BV, :, 1 : m), view(F[:right], :, 2 : m))
-                BV, large_matrix_tmp = large_matrix_tmp, BV
-
-                A_mul_B!(view(large_matrix_tmp, :, 1 : m - 1), view(W, :, 1 : m), view(F[:left], :, 2 : m))
-                W, large_matrix_tmp = large_matrix_tmp, W
-                
                 # Update the projection matrices M and MA.
-                copy!(view(MA, 1 : m - 1, 1 : m - 1), view(F.S, 2 : m, 2 : m))
-                copy!(view(MB, 1 : m - 1, 1 : m - 1), view(F.T, 2 : m, 2 : m))
-
-                # One vector is removed from the search space.
+                shrink!(MA, view(F.S, keep, keep), m - 1)
+                shrink!(MB, view(F.T, keep, keep), m - 1)
                 m -= 1
             else
                 should_extract = false
@@ -213,41 +199,30 @@ function jdqz(
             verbose && println("Shrinking the search space.")
             push!(residuals, NaN)
 
+            keep = 1 : min_dimension
+
             # Move min_dimension of the smallest harmonic Ritz values up front
-            schur_sort!(target, F, 1 : min_dimension)
+            schur_sort!(target, F, keep)
 
             # Shrink V, W, AV
-            # Todo: V[:, 1], AV[:, 1], BV[:, 1] and W[:, 1] are already available, no need to recompute
-            A_mul_B!(view(large_matrix_tmp, :, 1 : min_dimension), V, view(F[:right], :, 1 : min_dimension))
-            V, large_matrix_tmp = large_matrix_tmp, V
-
-            A_mul_B!(view(large_matrix_tmp, :, 1 : min_dimension), AV, view(F[:right], :, 1 : min_dimension))
-            AV, large_matrix_tmp = large_matrix_tmp, AV
-
-            A_mul_B!(view(large_matrix_tmp, :, 1 : min_dimension), BV, view(F[:right], :, 1 : min_dimension))
-            BV, large_matrix_tmp = large_matrix_tmp, BV
-
-            A_mul_B!(view(large_matrix_tmp, :, 1 : min_dimension), W, view(F[:left], :, 1 : min_dimension))
-            W, large_matrix_tmp = large_matrix_tmp, W
-
-            # Shrink the spaces
+            # Potential optimization: V[:, 1], AV[:, 1], BV[:, 1] and W[:, 1] are already available, 
+            # no need to recompute
+            shrink!(temporary, V, view(F[:right], :, keep), min_dimension)
+            shrink!(temporary, AV, view(F[:right], :, keep), min_dimension)
+            shrink!(temporary, BV, view(F[:right], :, keep), min_dimension)
+            shrink!(temporary, W, view(F[:left], :, keep), min_dimension).
+            shrink!(MA, view(F.S, keep, keep), min_dimension)
+            shrink!(MB, view(F.T, keep, keep), min_dimension)
             m = min_dimension
-
-            # Update M and MA.
-            copy!(view(MA, 1 : m, 1 : m), view(F.S, 1 : m, 1 : m))
-            copy!(view(MB, 1 : m, 1 : m), view(F.T, 1 : m, 1 : m))
         end
 
         iter += 1
     end
 
-    return Q[:, 1 : k], Z[:, 1 : k], S[1 : k, 1 : k], T[1 : k, 1 : k], residuals
+    return schur, residuals
 end
 
-function extract_generalized!(MA::StridedMatrix{T}, MB, V, W, AV, BV, Z, u, p, r, target, spare_vector) where {T}
-    m = size(MA, 1)
-
-    F = schurfact(MA, MB)
+function extract_generalized!(F, V, W, AV, BV, schur, r, target, spare_vector)
     schur_sort!(target, F, 1)
 
     # MA * F[:right] = F[:left] * F.S
@@ -257,23 +232,23 @@ function extract_generalized!(MA::StridedMatrix{T}, MB, V, W, AV, BV, Z, u, p, r
     right_eigenvec = view(F[:right], :, 1)
     left_eigenvec = view(F[:left], :, 1)
 
-    A_mul_B!(u, V, right_eigenvec)
-    A_mul_B!(p, W, left_eigenvec)
+    A_mul_B!(schur.Q.curr, V.all, right_eigenvec)
+    A_mul_B!(schur.Z.curr, W.all, left_eigenvec)
 
     ζ = F.alpha[1]
     η = F.beta[1]
 
     # Residual
     # r = η * Au - ζ * Bu
-    A_mul_B!(r, AV, right_eigenvec)
-    A_mul_B!(spare_vector, BV, right_eigenvec)
+    A_mul_B!(r, AV.all, right_eigenvec)
+    A_mul_B!(spare_vector, BV.all, right_eigenvec)
     scale!(r, η)
     axpy!(-ζ, spare_vector, r)
 
     # r <- (I - ZZ')r
-    just_orthogonalize!(Z, r, DGKS)
+    just_orthogonalize!(schur.Z.prev, r, DGKS)
 
-    F, ζ, η
+    ζ, η
 end
 
 """
@@ -281,10 +256,11 @@ Updates the last row and column of QZ = Q' * Z
 and computes the LU factorization of QZ. Z can
 be preconditioned.
 """
-function update_qz!(QZ, Q, Z, k)
-    for i = 1 : k
-        QZ.QZ[i, k] = dot(view(Q, :, i), view(Z, :, k))
-        QZ.QZ[k, i] = dot(view(Q, :, k), view(Z, :, i))
+function update_qz!(QZ, Q, Z, k::Int)
+    QZ.QZ[k, k] = dot(Q.curr, Z.curr)
+    @inbounds for i = 1 : k - 1
+        QZ.QZ[i, k] = dot(view(Q.basis, :, i), Z.curr)
+        QZ.QZ[k, i] = dot(Q.curr, view(Z.basis, :, i))
     end
     copy!(view(QZ.QZ_inv, 1 : k, 1 : k), view(QZ.QZ, 1 : k, 1 : k))
     QZ.LU = lufact!(view(QZ.QZ_inv, 1 : k, 1 : k))
