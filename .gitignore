@@ -4,3 +4,4 @@
 deps/deps.jl
 *.mem
 .DS_Store
+docs/build

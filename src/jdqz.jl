@@ -198,7 +198,6 @@ function jdqz(
 
         if m == max_dimension
             verbose && println("Shrinking the search space.")
-            push!(residuals, NaN)
 
             keep = 1 : min_dimension
 
