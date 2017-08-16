@@ -43,11 +43,13 @@ function jdqz(
     τ = isa(target, Near) ? target.τ : rand(numT)
 
     if testspace == Harmonic
-        ν = 1 / sqrt(1 + abs2(τ))
-        μ = -τ / sqrt(1 + abs2(τ))
+        γ = sqrt(1 + abs2(τ))
+        ν = 1 / γ
+        μ = -τ / γ
     else
-        ν = conj(τ) / sqrt(1 + abs2(τ))
-        μ = 1 / sqrt(1 + abs2(τ))
+        γ = sqrt(1 + abs2(τ))
+        ν = conj(τ) / γ
+        μ = 1 / γ
     end
 
     # Holds the final partial, generalized Schur decomposition where
