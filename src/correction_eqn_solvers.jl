@@ -94,12 +94,12 @@ function solve_deflated_correction!(solver::bicgstabl_solver, A, x, Q, θ, r::Ab
     nothing
 end
 
-function solve_generalized_correction_equation!(solver::exact_solver, A, B, preconditioner, x, Q, Z, precZ, QZ, ζ, η, r, spare_vector, tol)
+function solve_generalized_correction_equation!(solver::exact_solver, A, B, preconditioner, x, Q, Z, precZ, QZ, α, β, r, spare_vector, tol)
   n = size(A, 1)
   m = size(Q, 2)
   # Assuming both A and B are sparse while Q and Z are dense, let's try to avoid constructing a huge dense matrix.
-  # Let C = η * A - ζ * B
-
+  # Let C = β * A - α * B
+ 
   # We have to solve:
   # |C  Z| |t| = |-r| 
   # |Q' O| |z|   |0 |
@@ -109,7 +109,7 @@ function solve_generalized_correction_equation!(solver::exact_solver, A, B, prec
   # |Q' O|   |Q' * inv(C)  I| |O S|
 
   # And solve two systems with inv(C) occurring multiple times.
-  C = η * A - ζ * B # Completely sparse
+  C = β * A - α * B # Completely sparse
   y = Q' * (C \ r)
   S = Q' * (C \ Z) # Schur complement
   z = -S \ y
@@ -134,24 +134,24 @@ function A_ldiv_B!(QZ::QZpreconditioner{T}, x) where {T}
 end
 
 """
-Solve the problem (I - ZZ')(ηA - ζB)(I - QQ')t = b
+Solve the problem ``(I - ZZ^*)(βA - αB)(I - QQ^*)t = b``
 this is simplified in Krylov subspaces as solving
-(ηA - ζB)t = b
-with the left preconditioner Pl = (I - Z inv(Q'Z) Q')
+``(βA - αB)t = b``
+with the left preconditioner `Pl = (I - Z inv(Q'Z) Q')`
 """
-function solve_generalized_correction_equation!(solver::gmres_solver, A, B, preconditioner, x, Q, Z, precZ, QZ, ζ, η, r, spare_vector, tol)
+function solve_generalized_correction_equation!(solver::gmres_solver, A, B, preconditioner, x, Q, Z, precZ, QZ, α, β, r, spare_vector, tol)
 
     n = size(A, 1)
     T = eltype(x)
 
     Pl = QZpreconditioner{T}(Q, precZ, QZ, preconditioner)
-
+    
     Ax_minus_Bx = LinearMap{T}((y, x) -> begin
-        # y = (ηA - ζB) * x
+        # y = (βA - αB) * x
         A_mul_B!(y, B, x)
-        scale!(-ζ, y)
+        scale!(-α, y)
         A_mul_B!(spare_vector, A, x)
-        axpy!(η, spare_vector, y)
+        axpy!(β, spare_vector, y)
     end, n, ismutating = true)
 
     iterable = gmres_iterable(Ax_minus_Bx, r, Pl = Pl, maxiter = solver.iterations)
@@ -161,18 +161,18 @@ function solve_generalized_correction_equation!(solver::gmres_solver, A, B, prec
     copy!(x, iterable.x)
 end
 
-function solve_generalized_correction_equation!(solver::bicgstabl_solver, A, B, preconditioner, x, Q, Z, precZ, QZ, ζ, η, r, spare_vector, tol)
+function solve_generalized_correction_equation!(solver::bicgstabl_solver, A, B, preconditioner, x, Q, Z, precZ, QZ, α, β, r, spare_vector, tol)
     n = size(A, 1)
     T = eltype(x)
 
     Pl = QZpreconditioner{T}(Q, precZ, QZ, preconditioner)
-
+    
     Ax_minus_Bx = LinearMap{T}((y, x) -> begin
-        # y = (ηA - ζB) * x
+        # y = (βA - αB) * x
         A_mul_B!(y, B, x)
-        scale!(-ζ, y)
+        scale!(-α, y)
         A_mul_B!(spare_vector, A, x)
-        axpy!(η, spare_vector, y)
+        axpy!(β, spare_vector, y)
     end, n, ismutating = true)
 
     mv_products = 0

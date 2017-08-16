@@ -28,26 +28,15 @@ function A_ldiv_B!(p::SuperPreconditioner{T}, x::AbstractVector{T}) where {T<:Nu
   end
 end
 
-function another_example(; n = 1000, target = Near(31.0 + 0im))
+function another_example(; n = 1000, target = Near(31.0 + 0.1im))
   A = LinearMap{Float64}(myA!, n; ismutating = true)
   B = LinearMap{Float64}(myB!, n; ismutating = true)
   P = SuperPreconditioner(target.τ)
 
-  # Q2, Z2, S2, T2, residuals2 = jdqz(
-  #   A, B, bicgstabl_solver(A, max_mv_products = 100, l = 2),
-  #   preconditioner = Identity(),
-  #   target = target,
-  #   pairs = 5,
-  #   ɛ = 1e-9,
-  #   min_dimension = 10,
-  #   max_dimension = 20,
-  #   max_iter = 100,
-  #   verbose = false
-  # )
-
   schur, residuals = jdqz(
     A, B, bicgstabl_solver(A, max_mv_products = 10, l = 2),
     preconditioner = P,
+    testspace = Harmonic,
     target = target,
     pairs = 5,
     ɛ = 1e-9,
@@ -57,8 +46,21 @@ function another_example(; n = 1000, target = Near(31.0 + 0im))
     verbose = true
   )
 
-  plot(residuals, yscale = :log10, label = "With preconditioner", marker = :x)
-  # plot!(residuals2, yscale = :log10, label = "Without preconditioner", marker = :x)
+  schur2, residuals2 = jdqz(
+    A, B, bicgstabl_solver(A, max_mv_products = 10, l = 2),
+    preconditioner = P,
+    testspace = VariablePetrov,
+    target = target,
+    pairs = 5,
+    ɛ = 1e-9,
+    min_dimension = 10,
+    max_dimension = 20,
+    max_iter = 100,
+    verbose = true
+  )
+
+  plot(residuals, yscale = :log10, label = "Fixed", marker = :x)
+  plot!(residuals2, yscale = :log10, label = "Variable", marker = :x)
 end
 
 function generalized(; n = 1_000, target = Near(1.7 + 0.1im))

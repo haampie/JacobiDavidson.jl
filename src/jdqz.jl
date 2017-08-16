@@ -1,4 +1,4 @@
-export jdqz
+export jdqz, Petrov, VariablePetrov, Harmonic
 
 import Base.LinAlg.axpy!
 import Base.LinAlg.GeneralizedSchur
@@ -9,11 +9,18 @@ mutable struct QZ_product{matT}
     LU
 end
 
+abstract type TestSubspace end
+
+struct Petrov <: TestSubspace end
+struct VariablePetrov <: TestSubspace end
+struct Harmonic <: TestSubspace end
+
 function jdqz(
     A,
     B,
     solver::Alg;             # Solver for the correction equation
     preconditioner = Identity(),
+    testspace::Type{<:TestSubspace} = Harmonic,
     pairs::Int = 5,          # Number of eigenpairs wanted
     min_dimension::Int = 10, # Minimal search space size
     max_dimension::Int = 20, # Maximal search space size
@@ -34,8 +41,14 @@ function jdqz(
 
     # Harmonic Petrov values
     τ = isa(target, Near) ? target.τ : rand(numT)
-    ν = 1 / sqrt(1 + abs2(τ))
-    μ = -τ * ν
+
+    if testspace == Harmonic
+        ν = 1 / sqrt(1 + abs2(τ))
+        μ = -τ / sqrt(1 + abs2(τ))
+    else
+        ν = conj(τ) / sqrt(1 + abs2(τ))
+        μ = 1 / sqrt(1 + abs2(τ))
+    end
 
     # Holds the final partial, generalized Schur decomposition where
     # AQ = ZS and BQ = ZT, with Q, Z orthonormal and S, T upper triangular.
@@ -70,8 +83,8 @@ function jdqz(
     r = zeros(numT, n)
     spare_vector = zeros(numT, n)
 
-    local ζ::numT
-    local η::numT
+    local α::numT
+    local β::numT
     local F::GeneralizedSchur
 
     while k ≤ pairs && iter ≤ max_iter
@@ -89,7 +102,7 @@ function jdqz(
         if iter == 1
             rand!(V.curr) # Initialize with a random vector
         else
-            solve_generalized_correction_equation!(solver, A, B, preconditioner, V.curr, schur.Q.all, schur.Z.all, precZ.all, QZ, ζ, η, r, spare_vector, solver_reltol)
+            solve_generalized_correction_equation!(solver, A, B, preconditioner, V.curr, schur.Q.all, schur.Z.all, precZ.all, QZ, α, β, r, spare_vector, solver_reltol)
         end
 
         # Orthogonalize V[:, m] against the search subspace
@@ -127,7 +140,7 @@ function jdqz(
         while should_extract
             F = schurfact(MA.curr, MB.curr)
             
-            ζ, η = extract_generalized!(F, V, W, AV, BV, schur, r, target, spare_vector)
+            α, β = extract_generalized!(F, V, W, AV, BV, schur, r, target, spare_vector)
 
             # Update last column of precZ = preconditioner \ Z
             copy!(precZ.curr, schur.Z.curr)
@@ -144,11 +157,11 @@ function jdqz(
 
             # Store converged Petrov pairs
             if resnorm ≤ ɛ
-                verbose && println("Found an eigenvalue: ", ζ / η)
+                verbose && println("Found an eigenvalue: ", α / β)
 
                 # Store the eigenvalue (do this in-place?)
-                push!(schur.alphas, ζ)
-                push!(schur.betas, η)
+                push!(schur.alphas, α)
+                push!(schur.betas, β)
 
                 # One more eigenpair converged, yay.
                 k += 1
@@ -203,6 +216,12 @@ function jdqz(
         end
 
         iter += 1
+
+        if testspace == VariablePetrov
+            γ = sqrt(abs2(α) + abs2(β))
+            ν = conj(α) / γ
+            μ = conj(β) / γ
+        end
     end
 
     return schur, residuals
@@ -221,20 +240,20 @@ function extract_generalized!(F, V, W, AV, BV, schur, r, target, spare_vector)
     A_mul_B!(schur.Q.curr, V.all, right_eigenvec)
     A_mul_B!(schur.Z.curr, W.all, left_eigenvec)
 
-    ζ = F.alpha[1]
-    η = F.beta[1]
+    α = F.alpha[1]
+    β = F.beta[1]
 
     # Residual
-    # r = η * Au - ζ * Bu
+    # r = β * Au - α * Bu
     A_mul_B!(r, AV.all, right_eigenvec)
+    scale!(r, β)
     A_mul_B!(spare_vector, BV.all, right_eigenvec)
-    scale!(r, η)
-    axpy!(-ζ, spare_vector, r)
+    axpy!(-α, spare_vector, r)
 
     # r <- (I - ZZ')r
     just_orthogonalize!(schur.Z.prev, r, DGKS)
 
-    ζ, η
+    α, β
 end
 
 """
