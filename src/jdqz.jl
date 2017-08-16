@@ -1,6 +1,7 @@
 export jdqz
 
 import Base.LinAlg.axpy!
+import Base.LinAlg.GeneralizedSchur
 
 mutable struct QZ_product{matT}
     QZ::matT
@@ -24,29 +25,23 @@ function jdqz(
 ) where {Alg <: CorrectionSolver}
 
     solver_reltol = one(real(numT))
-
-    k = 0
-    m = 0
-    n = size(A, 1)
-
     residuals = real(numT)[]
+
+    n = size(A, 1)
+    iter = 1
+    k = 0 # Number of eigenvalues found
+    m = 0 # Size of search subspace
 
     # Harmonic Petrov values
     τ = isa(target, Near) ? target.τ : rand(numT)
-    
     ν = 1 / sqrt(1 + abs2(τ))
     μ = -τ * ν
 
     # Holds the final partial, generalized Schur decomposition where
     # AQ = ZS and BQ = ZT, with Q, Z orthonormal and S, T upper triangular.
+    # precZ holds preconditioner \ Z
     schur = PartialGeneralizedSchur(zeros(numT, n, pairs), zeros(numT, n, pairs), numT)
-
-    # Preconditioned Z
     precZ = SubSpace(zeros(numT, n, pairs))
-
-    # Low-dimensional projections: MA = W'AV, MB = W'BV
-    MA = ProjectedMatrix(zeros(numT, max_dimension, max_dimension))
-    MB = ProjectedMatrix(zeros(numT, max_dimension, max_dimension))
 
     # Orthonormal search subspace
     # Orthonormal test subspace
@@ -59,6 +54,10 @@ function jdqz(
     BV = SubSpace(zeros(numT, n, max_dimension))
     temporary = zeros(numT, n, max_dimension)
 
+    # Low-dimensional projections: MA = W'AV, MB = W'BV
+    MA = ProjectedMatrix(zeros(numT, max_dimension, max_dimension))
+    MB = ProjectedMatrix(zeros(numT, max_dimension, max_dimension))
+
     # QZ = Q' * (preconditioner \ Z), which is used in the correction equation. 
     # QZ_inv = lufact!(copy!(QZ_inv, QZ))
     QZ = QZ_product(
@@ -67,18 +66,13 @@ function jdqz(
         lufact(zeros(0, 0))
     )
 
-    iter = 1
-
+    # Residual
     r = zeros(numT, n)
     spare_vector = zeros(numT, n)
 
     local ζ::numT
     local η::numT
-    local F
-
-    # Idea: after the expansion work only with views
-    # for instance V <- view(Vmatrix, :, 1 : m - 1) and v = view(Vmatrix, :, m)
-    # so that it's less noisy down here.
+    local F::GeneralizedSchur
 
     while k ≤ pairs && iter ≤ max_iter
         solver_reltol /= 2
@@ -110,7 +104,7 @@ function jdqz(
         scale!(W.curr, ν)
         axpy!(μ, BV.curr, W.curr)
 
-        # Orthogonalize w against the Schur vectors Z
+        # Orthogonalize W.curr against the Schur vectors Z
         just_orthogonalize!(schur.Z.prev, W.curr, DGKS)
 
         # Make W.curr orthonormal w.r.t. W.prev
@@ -255,5 +249,7 @@ function update_qz!(QZ, Q, Z, k::Int)
         QZ.QZ[k, i] = dot(Q.curr, view(Z.basis, :, i))
     end
     copy!(view(QZ.QZ_inv, 1 : k, 1 : k), view(QZ.QZ, 1 : k, 1 : k))
+
+    # Maybe this can be updated from the previous LU decomp?
     QZ.LU = lufact!(view(QZ.QZ_inv, 1 : k, 1 : k))
 end
