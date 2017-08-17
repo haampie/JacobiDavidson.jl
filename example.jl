@@ -33,8 +33,8 @@ function another_example(; n = 1000, target = Near(31.0 + 0.1im))
   B = LinearMap{Float64}(myB!, n; ismutating = true)
   P = SuperPreconditioner(target.τ)
 
-  schur, residuals = jdqz(
-    A, B, bicgstabl_solver(A, max_mv_products = 10, l = 2),
+  schur2, residuals2 = jdqz(
+    A, B, gmres_solver(n, iterations = 3),
     preconditioner = P,
     testspace = Harmonic,
     target = target,
@@ -46,10 +46,10 @@ function another_example(; n = 1000, target = Near(31.0 + 0.1im))
     verbose = true
   )
 
-  schur2, residuals2 = jdqz(
-    A, B, bicgstabl_solver(A, max_mv_products = 10, l = 2),
+  schur, residuals = jdqz(
+    A, B, bicgstabl_solver(n, max_mv_products = 10, l = 2),
     preconditioner = P,
-    testspace = VariablePetrov,
+    testspace = Harmonic,
     target = target,
     pairs = 5,
     ɛ = 1e-9,
@@ -59,8 +59,8 @@ function another_example(; n = 1000, target = Near(31.0 + 0.1im))
     verbose = true
   )
 
-  plot(residuals, yscale = :log10, label = "Fixed", marker = :x)
-  plot!(residuals2, yscale = :log10, label = "Variable", marker = :x)
+  plot(residuals, yscale = :log10, label = "BiCGStab", marker = :x)
+  plot!(residuals2, yscale = :log10, label = "GMRES", marker = :x)
 end
 
 function generalized(; n = 1_000, target = Near(1.7 + 0.1im))

@@ -2,15 +2,13 @@ import Base: start, next, done
 import Base.LinAlg: Givens, givensAlgorithm
 import Base.A_ldiv_B!
 
-type ArnoldiDecomp{T, matT}
-    A::matT
+type ArnoldiDecomp{T}
     V::Matrix{T} # Orthonormal basis vectors
     H::Matrix{T} # Hessenberg matrix
 end
 
-ArnoldiDecomp{matT}(A::matT, order::Int, T::Type) = ArnoldiDecomp{T, matT}(
-    A,
-    zeros(T, size(A, 1), order + 1),
+ArnoldiDecomp(n::Int, order::Int, T::Type) = ArnoldiDecomp{T}(
+    zeros(T, n, order + 1),
     zeros(T, order + 1, order)
 )
 
@@ -28,11 +26,12 @@ Residual(order, T::Type) = Residual{T, real(T)}(
     one(real(T))
 )
 
-type GMRESIterable{preclT, precrT, vecT <: AbstractVector, arnoldiT <: ArnoldiDecomp, residualT <: Residual, resT <: Real}
+type GMRESIterable{matT,preclT, precrT, solT, rhsT, vecT, arnoldiT <: ArnoldiDecomp, residualT <: Residual, resT <: Real}
+    A::matT
     Pl::preclT
     Pr::precrT
-    x::vecT
-    b::vecT
+    x::solT
+    b::rhsT
     Ax::vecT # Some room to work in.
 
     arnoldi::arnoldiT
@@ -53,7 +52,7 @@ done(g::GMRESIterable, iteration::Int) = iteration ≥ g.maxiter || converged(g)
 function next(g::GMRESIterable, iteration::Int)
 
     # Arnoldi step: expand
-    expand!(g.arnoldi, g.Pl, g.Pr, iteration, g.Ax)
+    expand!(g.A, g.arnoldi, g.Pl, g.Pr, iteration, g.Ax)
     g.mv_products += 1
 
     # Orthogonalize V[:, k + 1] w.r.t. V[:, 1 : k]
@@ -167,23 +166,23 @@ function update_solution!{T}(x, y, arnoldi::ArnoldiDecomp{T}, Pr, k::Int, Ax)
     @blas! x += one(T) * Ax
 end
 
-function expand!(arnoldi::ArnoldiDecomp, Pl::Identity, Pr::Identity, k::Int, Ax)
+function expand!(A, arnoldi::ArnoldiDecomp, Pl::Identity, Pr::Identity, k::Int, Ax)
     # Simply expands by A * v without allocating
-    A_mul_B!(view(arnoldi.V, :, k + 1), arnoldi.A, view(arnoldi.V, :, k))
+    A_mul_B!(view(arnoldi.V, :, k + 1), A, view(arnoldi.V, :, k))
 end
 
-function expand!(arnoldi::ArnoldiDecomp, Pl, Pr::Identity, k::Int, Ax)
+function expand!(A, arnoldi::ArnoldiDecomp, Pl, Pr::Identity, k::Int, Ax)
     # Expands by Pl \ (A * v) without allocating
     nextV = view(arnoldi.V, :, k + 1)
-    A_mul_B!(nextV, arnoldi.A, view(arnoldi.V, :, k))
+    A_mul_B!(nextV, A, view(arnoldi.V, :, k))
     A_ldiv_B!(Pl, nextV)
 end
 
-function expand!(arnoldi::ArnoldiDecomp, Pl, Pr, k::Int, Ax)
+function expand!(A, arnoldi::ArnoldiDecomp, Pl, Pr, k::Int, Ax)
     # Expands by Pl \ (A * (Pr \ v)). Avoids allocation by using Ax.
     nextV = view(arnoldi.V, :, k + 1)
     A_ldiv_B!(nextV, Pr, view(arnoldi.V, :, k))
-    A_mul_B!(Ax, arnoldi.A, nextV)
+    A_mul_B!(Ax, A, nextV)
     copy!(nextV,  Ax)
     A_ldiv_B!(Pl, nextV)
 end

@@ -7,7 +7,11 @@ abstract type CorrectionSolver end
 struct gmres_solver <: CorrectionSolver
     iterations::Int
     tolerance::Float64
-    gmres_solver(;iterations::Int = 5, tolerance::Float64 = 1e-6) = new(iterations, tolerance)
+    arnoldi::ArnoldiDecomp
+    residual::Residual
+    function gmres_solver(n::Int; iterations::Int = 5, tolerance::Float64 = 1e-6)
+        new(iterations, tolerance, ArnoldiDecomp(n, iterations, Complex128))
+    end
 end
 
 struct bicgstabl_solver <: CorrectionSolver
@@ -20,8 +24,7 @@ struct bicgstabl_solver <: CorrectionSolver
     γ
     M
 
-    function bicgstabl_solver(A; l::Int = 2, max_mv_products::Int = 5, tolerance::Float64 = 1e-6)
-        n = size(A, 1)
+    function bicgstabl_solver(n::Int; l::Int = 2, max_mv_products::Int = 5, tolerance::Float64 = 1e-6)
         r_shadow = rand(Complex128, n)
         rs = Matrix{Complex128}(n, l + 1)
         us = Matrix{Complex128}(n, l + 1)
@@ -144,8 +147,10 @@ function solve_generalized_correction_equation!(solver::gmres_solver, A, B, prec
     n = size(A, 1)
     T = eltype(x)
 
+    # Preconditioner
     Pl = QZpreconditioner{T}(Q, precZ, QZ, preconditioner)
     
+    # Linear operator
     Ax_minus_Bx = LinearMap{T}((y, x) -> begin
         # y = (βA - αB) * x
         A_mul_B!(y, B, x)
@@ -154,11 +159,32 @@ function solve_generalized_correction_equation!(solver::gmres_solver, A, B, prec
         axpy!(β, spare_vector, y)
     end, n, ismutating = true)
 
-    iterable = gmres_iterable(Ax_minus_Bx, r, Pl = Pl, maxiter = solver.iterations)
+    residual = Residual(solver.iterations, T)
 
-    for res = iterable end
+    # Start with a zero guess
+    fill!(x, zero(T))
 
-    copy!(x, iterable.x)
+    # Initialize the first vector of the krylov basis
+    first_col = view(solver.arnoldi.V, :, 1)
+    copy!(first_col, r)
+    A_ldiv_B!(Pl, first_col)
+    residual.current = norm(first_col)
+    scale!(first_col, inv(residual.current))
+
+    # Update some residual stuff
+    residual.accumulator = one(real(T))
+    residual.β = residual.current
+
+    iterable = GMRESIterable(Ax_minus_Bx, Pl, Identity(), x, r, 
+        spare_vector, solver.arnoldi, residual, 0, 
+        solver.iterations, tol * residual.current, residual.current
+    )
+
+    for res = iterable 
+        # println(res)
+    end
+
+    nothing
 end
 
 function solve_generalized_correction_equation!(solver::bicgstabl_solver, A, B, preconditioner, x, Q, Z, precZ, QZ, α, β, r, spare_vector, tol)
