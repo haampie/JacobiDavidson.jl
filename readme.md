@@ -1,5 +1,7 @@
 # Jacobi-Davidson [WIP!]
 
+[![](https://img.shields.io/badge/docs-latest-blue.svg)](https://haampie.github.io/JacobiDavidson.jl/latest)
+
 An implementation of Jacobi-Davidson in Julia. Still very much WIP.
 
 Todo:

@@ -16,6 +16,5 @@ makedocs(
 deploydocs(
     repo = "github.com/haampie/JacobiDavidson.jl.git",
     target = "build",
-    deps = nothing,
-    make = nothing,
+    julia  = "0.6"
 )
