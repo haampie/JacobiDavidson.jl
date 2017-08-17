@@ -8,9 +8,9 @@ makedocs(
     authors = "Harmen Stoppels",
     linkcheck = !("skiplinks" in ARGS),
     pages = [
-        "Home" => "index.md"
-    ],
-    html_prettyurls = !("local" in ARGS),
+        "Home" => "index.md",
+        "Correction equation" => "solvers.md"
+    ]
 )
 
 deploydocs(
