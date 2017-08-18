@@ -2,11 +2,10 @@ using Documenter, JacobiDavidson
 
 makedocs(
     modules = [JacobiDavidson],
-    clean = false,
+    clean = true,
     format = :html,
     sitename = "JacobiDavidson.jl",
     authors = "Harmen Stoppels",
-    linkcheck = !("skiplinks" in ARGS),
     pages = [
         "Home" => "index.md",
         "Correction equation" => "solvers.md"
@@ -16,5 +15,8 @@ makedocs(
 deploydocs(
     repo = "github.com/haampie/JacobiDavidson.jl.git",
     target = "build",
-    julia  = "0.6"
+    osname = "linux",
+    julia  = "0.6",
+    deps = nothing,
+    make = nothing
 )
