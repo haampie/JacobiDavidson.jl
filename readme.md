@@ -2,7 +2,7 @@
 
 [![](https://img.shields.io/badge/docs-latest-blue.svg)](https://haampie.github.io/JacobiDavidson.jl/latest)
 
-An implementation of Jacobi-Davidson in Julia.
+An implementation of Jacobi-Davidson in Julia. This method can be used as an alternative to Julia's `eigs` to find a few eigenvalues and eigenvectors of a large sparse matrix.
 
 ## Example
 
