@@ -1,21 +1,8 @@
-# Jacobi-Davidson [WIP!]
+# Jacobi-Davidson
 
 [![](https://img.shields.io/badge/docs-latest-blue.svg)](https://haampie.github.io/JacobiDavidson.jl/latest)
 
-An implementation of Jacobi-Davidson in Julia. Still very much WIP.
-
-Todo:
-
- - [x] Matrix-free with LinearMaps.jl (but maybe overriding A_mul_B could work just as well)
- - [x] Targeting largest or smallest magnitude OR smallest or largest real part OR near a specified target in the complex plane
- - [x] Single eigenpair extraction
- - [ ] Adding tests
- - [ ] Preconditioning
- - [ ] Efficient implementation for Hermitian matrices (+ BiCGStab)
- - [x] Multiple eigenpairs & locking
- - [x] Implicit restart
- - [x] Convergence history / status
- - [x] Use harmonic Ritz values rather than Ritz values for better approximations of interior eigenvalues.
+An implementation of Jacobi-Davidson in Julia.
 
 
 ```julia
