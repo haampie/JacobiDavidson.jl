@@ -25,7 +25,7 @@ function jdqz(
     min_dimension::Int = 10, # Minimal search space size
     max_dimension::Int = 20, # Maximal search space size
     max_iter::Int = 200,
-    target::Target = LM(),       # Search target
+    target::Target = LM(-1.0 + 0.0im),       # Search target
     ɛ::Float64 = 1e-7,       # Maximum residual norm
     numT::Type = Complex128,
     verbose::Bool = false
@@ -39,16 +39,13 @@ function jdqz(
     k = 0 # Number of eigenvalues found
     m = 0 # Size of search subspace
 
-    # Harmonic Petrov values
-    τ = isa(target, Near) ? target.τ : rand(numT)
-
     if testspace == Harmonic
-        γ = sqrt(1 + abs2(τ))
+        γ = sqrt(1 + abs2(target.τ))
         ν = 1 / γ
-        μ = -τ / γ
+        μ = -target.τ / γ
     else
-        γ = sqrt(1 + abs2(τ))
-        ν = conj(τ) / γ
+        γ = sqrt(1 + abs2(target.τ))
+        ν = conj(target.τ) / γ
         μ = 1 / γ
     end
 

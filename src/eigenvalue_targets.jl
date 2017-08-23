@@ -10,22 +10,34 @@ struct Near{T} <: Target
 end
 
 # For finding eigenvalues with the smallest magnitude
-struct SM <: Target end
+struct SM{T} <: Target 
+  τ::Complex{T}
+end
 
 # For finding eigenvalues with the largest magnitude
-struct LM <: Target end
+struct LM{T} <: Target 
+  τ::Complex{T}
+end
 
 # For finding eigenvalues with the largest real part
-struct LR <: Target end
+struct LR{T} <: Target 
+  τ::Complex{T}
+end
 
 # For finding eigenvalues with the smallest real part
-struct SR <: Target end
+struct SR{T} <: Target 
+  τ::Complex{T}
+end
 
 # For finding eigenvalues with the largest imaginary part
-struct LI <: Target end
+struct LI{T} <: Target 
+  τ::Complex{T}
+end
 
 # For finding eigenvalues with the smallest imaginary part
-struct SI <: Target end
+struct SI{T} <: Target 
+  τ::Complex{T}
+end
 
 eigval(F::GeneralizedSchur, idx::Int) = F.alpha[idx] / F.beta[idx]
 
