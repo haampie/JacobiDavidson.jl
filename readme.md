@@ -4,20 +4,51 @@
 
 An implementation of Jacobi-Davidson in Julia.
 
+## Example
+
+We generate two random complex matrices A and B and use JDQZ to find the eigenvalues λ of the generalized eigenvalue problem Ax = λBx.
 
 ```julia
-# Find an eigenpair close to 10 in the complex plane
-# starting with Ritz values of a 10-dimensional
-# Krylov subspace, and expanding it with 5 basis vectors
-# obtained by solving the correction eqn approximately
-function testing(;krylov = 10, expansions = 5)
-  A = LinearMap(...)
+using JacobiDavidson, Plots
 
-  exact = exact_solver()
-  gmres = gmres_solver(iterations = 5)
-  target = Near(10.0 + 0.0im)
+function run(n = 1000)
+  A = 2 * speye(Complex128, n) + sprand(Complex128, n, n, 1 / n)
+  B = 2 * speye(Complex128, n) + sprand(Complex128, n, n, 1 / n)
 
-  λ₁, x₁ = jacobi_davidson(A, exact, krylov, expansions = expansions, target = target)
-  λ₂, x₂ = jacobi_davidson(A, gmres, krylov, expansions = expansions, target = target)
+  # Find all eigenvalues with a direct method
+  values = eigvals(full(A), full(B))
+
+  target = Near(1.5 - 0.7im)
+
+  schur, residuals = jdqz(
+    A, B,
+    gmres_solver(n, iterations = 7),
+    target = target,
+    pairs = 7,
+    min_dimension = 10,
+    max_dimension = 15,
+    max_iter = 300,
+    verbose = true
+  )
+
+  # The eigenvalues found by Jacoi
+  found = schur.alphas ./ schur.betas
+
+  # 
+  p1 = scatter(real(values), imag(values), label = "eig")
+  scatter!(real(found), imag(found), marker = :+, label = "jdqz")
+  scatter!([real(target.τ)], [imag(target.τ)], marker = :star, label = "Target")
+
+  p2 = plot(residuals, yscale = :log10, marker = :auto, label = "Residual norm")
+
+  p1, p2
 end
 ```
+
+The first plot shows the full spectrum, together with the target we have set and the seven converged eigenvalues:
+
+![Eigenvalues found](https://haampie.github.io/JacobiDavidson.jl/latest/found.png)
+
+The second plot shows the residual norm of Ax - λBx during the iterations:
+
+![Residual norm](https://haampie.github.io/JacobiDavidson.jl/latest/residualnorm.png)
