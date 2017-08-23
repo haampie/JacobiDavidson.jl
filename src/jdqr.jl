@@ -9,7 +9,7 @@ function jdqr(
     min_dimension::Int = 10, # Minimal search space size
     max_dimension::Int = 20, # Maximal search space size
     max_iter::Int = 200,
-    τ::Complex128 = 0.0 + 0im,       # Search target
+    target::Target = Near(0.0 + 0im), # Search target
     ɛ::Float64 = 1e-7,       # Maximum residual norm
     T::Type = Complex128,
     verbose::Bool = false
@@ -78,7 +78,7 @@ function jdqr(
 
         # AV is just the product (A - τI)V
         A_mul_B!(AV.curr, A, V.curr)
-        axpy!(-τ, V.curr, AV.curr)
+        axpy!(-target.τ, V.curr, AV.curr)
 
         # Expand W with (A - τI)V, and then orthogonalize
         copy!(W.curr, AV.curr)
@@ -110,7 +110,7 @@ function jdqr(
         while search
 
             F = schurfact(MA.curr, M.curr)
-            λ = extract_harmonic!(F, V, AV, r, schur, τ)
+            λ = extract_harmonic!(F, V, AV, r, schur, target.τ)
             resnorm = norm(r)
 
             # Convergence history of the harmonic Ritz values
@@ -158,7 +158,7 @@ function jdqr(
 
             # Move min_dimension of the smallest harmonic Ritz values up front
             keep = 1 : min_dimension
-            schur_sort!(SM(), F, keep)
+            schur_sort!(SM(0.0+0im), F, keep)
 
             shrink!(temporary, V, view(F[:right], :, keep), min_dimension)
             shrink!(temporary, AV, view(F[:right], :, keep), min_dimension)
@@ -178,7 +178,7 @@ function extract_harmonic!(F::GeneralizedSchur, V::SubSpace, AV::SubSpace, r, sc
     # Compute the Schur decomp to find the harmonic Ritz values
 
     # Move the smallest harmonic Ritz value up front
-    schur_sort!(SM(), F, 1)
+    schur_sort!(SM(0.0 + 0im), F, 1)
 
     # Pre-ritz vector
     y = view(F.Z, :, 1)
