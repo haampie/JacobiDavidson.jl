@@ -63,17 +63,16 @@ function another_example(; n = 1000, target = Near(31.0 + 0.1im))
   plot!(residuals2, yscale = :log10, label = "GMRES", marker = :x)
 end
 
-function generalized(; n = 1_000, target = Near(1.7 + 0.1im))
+function generalized(; n = 1_000, target = Near(0.5 + 0.1im))
   srand(50)
   A = 2 * speye(Complex128, n) + sprand(Complex128, n, n, 1 / n)
   B = 2 * speye(Complex128, n) + sprand(Complex128, n, n, 1 / n)
 
   values = eigvals(full(A), full(B))
 
-  @time Q, Z, S, T, residuals = jdqz(
+  @time schur, residuals = jdqz(
     A, B,
-    bicgstabl_solver(A, max_mv_products = 100, l = 2),
-    preconditioner = Identity(),
+    gmres_solver(n, iterations = 10),
     target = target,
     pairs = 10,
     min_dimension = 10,
@@ -82,17 +81,11 @@ function generalized(; n = 1_000, target = Near(1.7 + 0.1im))
     verbose = true
   )
   
-  found = diag(S) ./ diag(T)
-
-  # @time d, = eigs(A, B, sigma = target, nev = 20, tol = 1e-8)
+  found = schur.alphas ./ schur.betas
 
   p1 = scatter(real(values), imag(values), label = "eig")
   scatter!(real(found), imag(found), marker = :+, label = "jdqz")
-  # scatter!(real(d), imag(d), marker = :x, label = "eigs")
-
-  if isa(target, Near)
-    scatter!([real(target.τ)], [imag(target.τ)], marker = :star, label = "Target")
-  end
+  scatter!([real(target.τ)], [imag(target.τ)], marker = :star, label = "Target")
 
   p2 = plot(residuals, yscale = :log10)
 
