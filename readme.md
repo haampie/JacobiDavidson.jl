@@ -31,7 +31,7 @@ function run(n = 1000)
     verbose = true
   )
 
-  # The eigenvalues found by Jacoi
+  # The eigenvalues found by Jacobi-Davidson
   found = schur.alphas ./ schur.betas
 
   # 
