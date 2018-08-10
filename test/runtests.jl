@@ -1,6 +1,6 @@
 module Tests
 
-using JacobiDavidson, Base.Test
+using JacobiDavidson, Test
 
 function run()
     @testset "Schur permutations" begin include("schur_sort.jl") end

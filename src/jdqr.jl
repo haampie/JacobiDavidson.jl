@@ -1,6 +1,6 @@
 export jdqr
 
-import Base.LinAlg.GeneralizedSchur
+import LinearAlgebra.GeneralizedSchur
 
 function jdqr(
     A,                       # Some square matrix
@@ -11,7 +11,7 @@ function jdqr(
     max_iter::Int = 200,
     target::Target = Near(0.0 + 0im), # Search target
     ɛ::Float64 = 1e-7,       # Maximum residual norm
-    T::Type = Complex128,
+    T::Type = ComplexF64,
     verbose::Bool = false
 ) where {Alg <: CorrectionSolver}
 
@@ -40,13 +40,13 @@ function jdqr(
     # m is the current dimension of the search subspace
     m = 0
 
-    schur = PartialSchur(zeros(T, n, pairs), T)
+    pschur = PartialSchur(zeros(T, n, pairs), T)
 
     # Current eigenvalue
     λ = zero(T)
 
     # Current residual vector
-    r = Vector{T}(n)
+    r = Vector{T}(undef, n)
 
     iter = 1
 
@@ -70,21 +70,21 @@ function jdqr(
         if iter == 1
             rand!(V.curr)
         else
-            solve_deflated_correction!(solver, A, V.curr, schur.all, λ, r, solver_reltol)
+            solve_deflated_correction!(solver, A, V.curr, pschur.all, λ, r, solver_reltol)
         end
 
         # Search space is orthonormalized
         orthogonalize_and_normalize!(V.prev, V.curr, zeros(T, m - 1), DGKS)
 
         # AV is just the product (A - τI)V
-        A_mul_B!(AV.curr, A, V.curr)
+        mul!(AV.curr, A, V.curr)
         axpy!(-target.τ, V.curr, AV.curr)
 
         # Expand W with (A - τI)V, and then orthogonalize
-        copy!(W.curr, AV.curr)
+        copyto!(W.curr, AV.curr)
 
         # Orthogonalize w.r.t. the converged Schur vectors
-        just_orthogonalize!(schur.locked, W.curr, DGKS)
+        just_orthogonalize!(pschur.locked, W.curr, DGKS)
 
         # Orthonormalize W[:, m] w.r.t. previous columns of W
         MA.matrix[m, m] = orthogonalize_and_normalize!(W.prev, W.curr, view(MA.matrix, 1 : m - 1, m), DGKS)
@@ -102,20 +102,20 @@ function jdqr(
         # @assert norm(W.all'W.all - I) < 1e-12
         # @assert norm(V.all'V.all - I) < 1e-12
         # @assert norm(M.curr - W.all'V.all) < 1e-12
-        # @assert norm(W.all * MA.curr - AV.all + (schur.locked * (schur.locked'AV.all))) < pairs * ɛ
+        # @assert norm(W.all * MA.curr - AV.all + (pschur.locked * (pschur.locked'AV.all))) < pairs * ɛ
 
         search = true
 
         ### Extract
         while search
 
-            F = schurfact(MA.curr, M.curr)
-            λ = extract_harmonic!(F, V, AV, r, schur, target.τ)
+            F = schur(MA.curr, M.curr)
+            λ = extract_harmonic!(F, V, AV, r, pschur, target.τ)
             resnorm = norm(r)
 
             # Convergence history of the harmonic Ritz values
             push!(harmonic_ritz_values, F.alpha ./ F.beta)
-            push!(converged_ritz_values, copy(schur.values))
+            push!(converged_ritz_values, copy(pschur.values))
             push!(residuals, resnorm)
 
             verbose && println("Residual = ", resnorm)
@@ -125,19 +125,19 @@ function jdqr(
                 verbose && println("Found an eigenvalue ", λ)
                 push!(converged_ritz_values[iter], λ)
 
-                push!(schur.values, λ)
-                lock!(schur)
+                push!(pschur.values, λ)
+                lock!(pschur)
 
                 k += 1
 
                 # Are we done yet?
-                k == pairs && return schur, harmonic_ritz_values, converged_ritz_values, residuals
+                k == pairs && return pschur, harmonic_ritz_values, converged_ritz_values, residuals
 
                 # Now remove this Schur vector from the search space.
                 keep = 2 : m
-                shrink!(temporary, V, view(F[:right], :, keep), m - 1)
-                shrink!(temporary, AV, view(F[:right], :, keep), m - 1)
-                shrink!(temporary, W, view(F[:left], :, keep), m - 1)
+                shrink!(temporary, V, view(F.right, :, keep), m - 1)
+                shrink!(temporary, AV, view(F.right, :, keep), m - 1)
+                shrink!(temporary, W, view(F.left, :, keep), m - 1)
                 shrink!(M, view(F.T, keep, keep), m - 1)
                 shrink!(MA, view(F.S, keep, keep), m - 1)
 
@@ -160,9 +160,9 @@ function jdqr(
             keep = 1 : min_dimension
             schur_sort!(SM(0.0+0im), F, keep)
 
-            shrink!(temporary, V, view(F[:right], :, keep), min_dimension)
-            shrink!(temporary, AV, view(F[:right], :, keep), min_dimension)
-            shrink!(temporary, W, view(F[:left], :, keep), min_dimension)
+            shrink!(temporary, V, view(F.right, :, keep), min_dimension)
+            shrink!(temporary, AV, view(F.right, :, keep), min_dimension)
+            shrink!(temporary, W, view(F.left, :, keep), min_dimension)
             shrink!(M, view(F.T, keep, keep), min_dimension)
             shrink!(MA, view(F.S, keep, keep), min_dimension)
             m = min_dimension
@@ -171,10 +171,10 @@ function jdqr(
         iter += 1
     end
 
-    schur, harmonic_ritz_values, converged_ritz_values, residuals
+    pschur, harmonic_ritz_values, converged_ritz_values, residuals
 end
 
-function extract_harmonic!(F::GeneralizedSchur, V::SubSpace, AV::SubSpace, r, schur, τ)
+function extract_harmonic!(F::GeneralizedSchur, V::SubSpace, AV::SubSpace, r, pschur, τ)
     # Compute the Schur decomp to find the harmonic Ritz values
 
     # Move the smallest harmonic Ritz value up front
@@ -184,20 +184,20 @@ function extract_harmonic!(F::GeneralizedSchur, V::SubSpace, AV::SubSpace, r, sc
     y = view(F.Z, :, 1)
 
     # Ritz vector
-    A_mul_B!(schur.active, V.all, y)
+    mul!(pschur.active, V.all, y)
 
     # Rayleigh quotient λ = approx eigenvalue s.t. if r = (A-τI)u - λ * u, then r ⟂ u
     λ = conj(F.beta[1]) * F.alpha[1]
 
     # Residual r = (A - τI)u - λ * u = AV*y - λ * u
-    A_mul_B!(r, AV.all, y)
-    axpy!(-λ, schur.active, r)
+    mul!(r, AV.all, y)
+    axpy!(-λ, pschur.active, r)
 
     # Orthogonalize w.r.t. Q
-    just_orthogonalize!(schur.locked, r, DGKS)
+    just_orthogonalize!(pschur.locked, r, DGKS)
 
     # Assert that the residual is perpendicular to the Ritz vector
-    # @assert abs(dot(r, schur.active)) < 1e-5
+    # @assert abs(dot(r, pschur.active)) < 1e-5
 
     λ + τ
 end

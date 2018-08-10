@@ -22,4 +22,4 @@ solver = gmres_solver(n, iterations = 5)
 
 Preconditioners can be used to improve the iterative method that solves the correction equation approximately. Although Jacobi-Davidson can be implemented with a variable or flexible preconditioner that changes each iteration, it is often more efficient to construct a fixed preconditioner for $(A - \tau B)$ or $(A - \tau I)$ for JDQZ and JDQR respectively. The motivation is that the preconditioner has to be deflated with the converged Schur vectors, which can be performed just once when the preconditioner is kept fixed.
 
-Preconditioners `P` are expected to implement `A_ldiv_B!(P, x)` which performs `x = P \ x` in-place. 
+Preconditioners `P` are expected to implement `ldiv!(P, x)` which performs `x = P \ x` in-place.

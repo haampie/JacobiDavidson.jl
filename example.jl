@@ -4,7 +4,7 @@ using Plots
 using JacobiDavidson
 using LinearMaps
 
-import Base.LinAlg.A_ldiv_B!
+import LinearAlgabra: ldiv!
 
 function myA!(y::AbstractVector{T}, x::AbstractVector{T}) where {T<:Number}
   for i = 1 : length(x)
@@ -22,7 +22,7 @@ struct SuperPreconditioner{numT <: Number}
   target::numT
 end
 
-function A_ldiv_B!(p::SuperPreconditioner{T}, x::AbstractVector{T}) where {T<:Number}
+function ldiv!(p::SuperPreconditioner{T}, x::AbstractVector{T}) where {T<:Number}
   for i = 1 : length(x)
     @inbounds x[i] = x[i] * sqrt(i) / (i - p.target)
   end
@@ -65,8 +65,8 @@ end
 
 function generalized(; n = 1_000, target = Near(0.5 + 0.1im))
   srand(50)
-  A = 2 * speye(Complex128, n) + sprand(Complex128, n, n, 1 / n)
-  B = 2 * speye(Complex128, n) + sprand(Complex128, n, n, 1 / n)
+  A = 2 * speye(ComplexF64, n) + sprand(ComplexF64, n, n, 1 / n)
+  B = 2 * speye(ComplexF64, n) + sprand(ComplexF64, n, n, 1 / n)
 
   values = eigvals(full(A), full(B))
 

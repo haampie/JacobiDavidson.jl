@@ -66,17 +66,17 @@ PartialSchur(Q, numT) = PartialSchur(
     0
 )
 
-function lock!(schur::PartialSchur)
-    schur.num_locked += 1
-    schur.locked = view(schur.Q, :, 1 : schur.num_locked)
+function lock!(pschur::PartialSchur)
+    pschur.num_locked += 1
+    pschur.locked = view(pschur.Q, :, 1 : pschur.num_locked)
 
     # Don't extend beyond the max number of Schur vectors
-    if schur.num_locked < size(schur.Q, 2)
-        schur.all = view(schur.Q, :, 1 : schur.num_locked + 1)
-        schur.active = view(schur.Q, :, schur.num_locked + 1)
+    if pschur.num_locked < size(pschur.Q, 2)
+        pschur.all = view(pschur.Q, :, 1 : pschur.num_locked + 1)
+        pschur.active = view(pschur.Q, :, pschur.num_locked + 1)
     end
 
-    schur
+    pschur
 end
 
 mutable struct PartialGeneralizedSchur{subT <: SubSpace, vecT <: AbstractVector}
@@ -93,19 +93,19 @@ PartialGeneralizedSchur(Q, Z, numT) = PartialGeneralizedSchur(
     numT[]
 )
 
-@inline function resize!(schur::PartialGeneralizedSchur, size::Int)
-    resize!(schur.Q, size)
-    resize!(schur.Z, size)
+@inline function resize!(pschur::PartialGeneralizedSchur, size::Int)
+    resize!(pschur.Q, size)
+    resize!(pschur.Z, size)
 end
 
 function shrink!(temporary, subspace::SubSpace, combination::StridedMatrix, dimension)
     tmp = view(temporary, :, 1 : dimension)
-    A_mul_B!(tmp, subspace.all, combination)
-    copy!(subspace.all, tmp)
+    mul!(tmp, subspace.all, combination)
+    copyto!(subspace.all, tmp)
     resize!(subspace, dimension)
 end
 
 function shrink!(M::ProjectedMatrix, replacement, dimension)
-    copy!(view(M.matrix, 1 : dimension, 1 : dimension), replacement)
+    copyto!(view(M.matrix, 1 : dimension, 1 : dimension), replacement)
     resize!(M, dimension)
 end

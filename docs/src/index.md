@@ -1,5 +1,5 @@
 # JacobiDavidson.jl
-This package implements the Jacobi-Davidson method for (generalized) non-Hermitian eigenvalue problems involving large, sparse matrices. 
+This package implements the Jacobi-Davidson method for (generalized) non-Hermitian eigenvalue problems involving large, sparse matrices.
 
 It provides two methods `jdqr` and `jdqz` which iteratively generate a partial, approximate Schur decomposition for a matrix $A$ or a matrix pencil $(A, B)$. The Schur vectors form an orthonormal basis for eigenspaces, and they can easily be transformed to eigenvectors as well.
 
@@ -11,12 +11,12 @@ The Jacobi-Davidson method on the other hand is not a Krylov subspace method and
 This means that Jacobi-Davidson can use a few steps of an iterative method internally, optionally with a preconditioner.
 
 ## Example
-Let $A$ and $B$ be diagonal matrices of size $n$ with $A_{kk} = \sqrt{k}$ and $B_{kk} = 1 / \sqrt{k}$. The eigenvalues of the problem $Ax = \lambda Bx$ are $1, \dots, n$. The exact inverse of $(A - \tau B)$ is used as a preconditioner, namely a diagonal matrix $P$ with $P_{kk} = \sqrt{k} / (k - \tau)$. 
+Let $A$ and $B$ be diagonal matrices of size $n$ with $A_{kk} = \sqrt{k}$ and $B_{kk} = 1 / \sqrt{k}$. The eigenvalues of the problem $Ax = \lambda Bx$ are $1, \dots, n$. The exact inverse of $(A - \tau B)$ is used as a preconditioner, namely a diagonal matrix $P$ with $P_{kk} = \sqrt{k} / (k - \tau)$.
 
 We implement these linear operators matrix-free:
 
 ```julia
-import Base.LinAlg.A_ldiv_B!
+import LinearAlgebra: ldiv!
 
 function myA!(y, x)
   for i = 1 : length(x)
@@ -34,7 +34,7 @@ struct SuperPreconditioner{numT <: Number}
   target::numT
 end
 
-function A_ldiv_B!(p::SuperPreconditioner, x)
+function ldiv!(p::SuperPreconditioner, x)
   for i = 1 : length(x)
     @inbounds x[i] = x[i] * sqrt(i) / (i - p.target)
   end
@@ -53,7 +53,7 @@ A = LinearMap{Float64}(myA!, n; ismutating = true)
 B = LinearMap{Float64}(myB!, n; ismutating = true)
 P = SuperPreconditioner(target.τ)
 
-schur, residuals = jdqz(A, B, 
+pschur, residuals = jdqz(A, B,
     bicgstabl_solver(A, max_mv_products = 10, l = 2),
     preconditioner = P,
     testspace = Harmonic,

@@ -1,8 +1,9 @@
-using JacobiDavidson, Base.Test
+using JacobiDavidson, Test
+using LinearAlgebra
 
-A = rand(Complex128, 10, 10)
-B = rand(Complex128, 10, 10)
-F = schurfact(A, B)
+A = rand(ComplexF64, 10, 10)
+B = rand(ComplexF64, 10, 10)
+F = schur(A, B)
 
 τ = 1.0 + 0.0im
 eigenvalues = F.alpha ./ F.beta
