@@ -11,7 +11,7 @@ struct ModifiedGramSchmidt <: OrthogonalizationMethod end
 
 function orthogonalize_and_normalize!(V::StridedMatrix{T}, w::StridedVector{T}, h::StridedVector{T}, ::Type{DGKS}) where {T}
     # Orthogonalize using BLAS-2 ops
-    Ac_mul_B!(h, V, w)
+    mul!(h, V', w)
     BLAS.gemv!('N', -one(T), V, h, one(T), w)
     nrm = norm(w)
 
@@ -23,28 +23,28 @@ function orthogonalize_and_normalize!(V::StridedMatrix{T}, w::StridedVector{T}, 
     # Repeat as long as the DGKS condition is satisfied
     # Typically this condition is true only once.
     while nrm < η * projection_size
-        correction = Ac_mul_B(V, w)
+        correction = V' * w
         projection_size = norm(correction)
         # w = w - V * correction
         BLAS.gemv!('N', -one(T), V, correction, one(T), w)
-        @blas! h += one(T) * correction
+        BLAS.axpy!(one(T), correction, h)
         nrm = norm(w)
     end
 
     # Normalize; note that we already have norm(w).
-    scale!(w, one(T) / nrm)
+    lmul!(one(T) / nrm, w)
 
     nrm
 end
 
 function orthogonalize_and_normalize!(V::StridedMatrix{T}, w::StridedVector{T}, h::StridedVector{T}, ::Type{ClassicalGramSchmidt}) where {T}
     # Orthogonalize using BLAS-2 ops
-    Ac_mul_B!(h, V, w)
+    mul!(h, V', w)
     BLAS.gemv!('N', -one(T), V, h, one(T), w)
     nrm = norm(w)
 
     # Normalize
-    scale!(w, one(T) / nrm)
+    lmul!(one(T) / nrm, w)
 
     nrm
 end
@@ -54,18 +54,18 @@ function orthogonalize_and_normalize!(V::StridedMatrix{T}, w::StridedVector{T}, 
     for i = 1 : size(V, 2)
         column = view(V, :, i)
         h[i] = dot(column, w)
-        @blas! w -= h[i] * column
+        BLAS.axpy!(-h[i], column, w)
     end
 
     nrm = norm(w)
-    scale!(w, one(T) / nrm)
+    lmul!(one(T) / nrm, w)
 
     nrm
 end
 
 function just_orthogonalize!(V::StridedMatrix{T}, w::StridedVector{T}, ::Type{DGKS}) where {T}
     # Orthogonalize using BLAS-2 ops
-    h = Ac_mul_B(V, w)
+    h = V' * w
     BLAS.gemv!('N', -one(T), V, h, one(T), w)
     nrm = norm(w)
 
@@ -78,7 +78,7 @@ function just_orthogonalize!(V::StridedMatrix{T}, w::StridedVector{T}, ::Type{DG
     # Typically this condition is true only once.
     while nrm < η * projection_size
         # Reuse h here.
-        Ac_mul_B!(h, V, w)
+        mul!(h, V', w)
         projection_size = norm(h)
         # w = w - V * h
         BLAS.gemv!('N', -one(T), V, h, one(T), w)
@@ -90,7 +90,7 @@ end
 
 function just_orthogonalize!(V::StridedMatrix{T}, w::StridedVector{T}, h::StridedVector{T}, ::Type{DGKS}) where {T}
     # Orthogonalize using BLAS-2 ops
-    Ac_mul_B!(h, V, w)
+    mul!(h, V', w)
     BLAS.gemv!('N', -one(T), V, h, one(T), w)
     nrm = norm(w)
 
@@ -102,11 +102,11 @@ function just_orthogonalize!(V::StridedMatrix{T}, w::StridedVector{T}, h::Stride
     # Repeat as long as the DGKS condition is satisfied
     # Typically this condition is true only once.
     while nrm < η * projection_size
-        correction = Ac_mul_B(V, w)
+        correction = V' * w
         projection_size = norm(correction)
         # w = w - V * correction
         BLAS.gemv!('N', -one(T), V, correction, one(T), w)
-        @blas! h += one(T) * correction
+        BLAS.axpy!(one(T), correction, h)
         nrm = norm(w)
     end
 

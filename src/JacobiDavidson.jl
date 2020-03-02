@@ -1,12 +1,12 @@
-__precompile__(true)
 module JacobiDavidson
 
-using SugarBLAS
 using LinearMaps
+using LinearAlgebra
+using IterativeSolvers
+using Random
 
-include("solvers/preconditioners.jl")
-include("solvers/bicgstabl.jl")
-include("solvers/gmres.jl")
+import LinearAlgebra: ldiv!
+import LinearAlgebra.BLAS: axpy!, gemv!
 
 include("subspaces.jl")
 include("correction_eqn_solvers.jl")

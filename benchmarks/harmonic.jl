@@ -14,23 +14,21 @@ function bench_harmonic(; n = 100, τ = 2.0 + 0.01im)
 
   bench_new = @benchmark JacobiDavidson.jdqr_harmonic_efficient(
     $A,
-    $(gmres_solver(iterations = 5)),
+    $(GMRES(iterations = 5)),
     pairs = 10,
-    min_dimension = 10,
-    max_dimension = 15,
+    subspace_dimensions = 10:15,
     max_iter = 300,
-    ɛ = 1e-8,
+    tolerance = 1e-8,
     τ = $τ
   ) setup = (srand(4))
 
   bench_old = @benchmark JacobiDavidson.jdqr_harmonic(
     $A,
-    $(gmres_solver(iterations = 5)),
+    $(GMRES(iterations = 5)),
     pairs = 10,
-    min_dimension = 10,
-    max_dimension = 15,
+    subspace_dimensions = 10:15,
     max_iter = 300,
-    ɛ = 1e-8,
+    tolerance = 1e-8,
     τ = $τ
   ) setup = (srand(4))
 
@@ -50,12 +48,11 @@ function bench_harmonic_allocs(; n = 100, τ = 2.0 + 0.01im)
 
   result = JacobiDavidson.jdqr_harmonic_efficient(
     A,
-    gmres_solver(iterations = 5),
+    GMRES(iterations = 5),
     pairs = 10,
-    min_dimension = 10,
-    max_dimension = 15,
+    subspace_dimensions = 10:15,
     max_iter = 300,
-    ɛ = 1e-8,
+    tolerance = 1e-8,
     τ = τ
   )
 
@@ -66,12 +63,11 @@ function bench_harmonic_allocs(; n = 100, τ = 2.0 + 0.01im)
 
   result = JacobiDavidson.jdqr_harmonic_efficient(
     A,
-    gmres_solver(iterations = 5),
+    GMRES(iterations = 5),
     pairs = 10,
-    min_dimension = 10,
-    max_dimension = 15,
+    subspace_dimensions = 10:15,
     max_iter = 300,
-    ɛ = 1e-8,
+    tolerance = 1e-8,
     τ = τ
   )
 end
