@@ -34,10 +34,18 @@ struct SuperPreconditioner{numT <: Number}
   target::numT
 end
 
-function ldiv!(p::SuperPreconditioner, x)
+function ldiv!(p::SuperPreconditioner{T}, x::AbstractVector{T}) where {T<:Number}
   for i = 1 : length(x)
     @inbounds x[i] = x[i] * sqrt(i) / (i - p.target)
   end
+  return x
+end
+
+function ldiv!(y::AbstractVector{T}, p::SuperPreconditioner{T}, x::AbstractVector{T}) where {T<:Number}
+  for i = 1 : length(x)
+    @inbounds y[i] = x[i] * sqrt(i) / (i - p.target)
+  end
+  return y
 end
 ```
 
@@ -54,14 +62,13 @@ B = LinearMap{Float64}(myB!, n; ismutating = true)
 P = SuperPreconditioner(target.τ)
 
 pschur, residuals = jdqz(A, B,
-    bicgstabl_solver(A, max_mv_products = 10, l = 2),
+    solver = BiCGStabl(n, max_mv_products = 10, l = 2),
     preconditioner = P,
     testspace = Harmonic,
     target = target,
     pairs = 5,
-    ɛ = 1e-9,
-    min_dimension = 10,
-    max_dimension = 20,
+    tolerance = 1e-9,
+    subspace_dimensions = 10:20,
     max_iter = 100,
     verbose = true
 )

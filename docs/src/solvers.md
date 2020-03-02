@@ -7,7 +7,7 @@ At this point preconditioned GMRES and BiCGStabl(l) are available as iterative m
 BiCGStab(l) is a non-optimal Krylov subspace method, but is of interest because it has a fixed amount of operations per iteration:
 
 ```julia
-solver = bicgstabl_solver(n, max_mv_products = 10, l = 2)
+solver = BiCGStabl(n, max_mv_products = 10, l = 2)
 ```
 
 ## GMRES
@@ -15,7 +15,7 @@ solver = bicgstabl_solver(n, max_mv_products = 10, l = 2)
 GMRES selects the minimal residual solution from a Krylov subspace. We use GMRES without restarts, since we assume only a few iterations are performed.
 
 ```julia
-solver = gmres_solver(n, iterations = 5)
+solver = GMRES(n, iterations = 5)
 ```
 
 ## Preconditioning

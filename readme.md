@@ -9,24 +9,23 @@ An implementation of Jacobi-Davidson in Julia. This method can be used as an alt
 We generate two random complex matrices A and B and use JDQZ to find the eigenvalues λ of the generalized eigenvalue problem Ax = λBx.
 
 ```julia
-using JacobiDavidson, Plots
+using JacobiDavidson, LinearAlgebra, SparseArrays, Plots
 
 function run(n = 1000)
-  A = 2 * speye(ComplexF64, n) + sprand(ComplexF64, n, n, 1 / n)
-  B = 2 * speye(ComplexF64, n) + sprand(ComplexF64, n, n, 1 / n)
+  A = 2I + sprand(ComplexF64, n, n, 1 / n)
+  B = 2I + sprand(ComplexF64, n, n, 1 / n)
 
   # Find all eigenvalues with a direct method
-  values = eigvals(full(A), full(B))
+  values = eigvals(Matrix(A), Matrix(B))
 
   target = Near(1.5 - 0.7im)
 
   pschur, residuals = jdqz(
     A, B,
-    gmres_solver(n, iterations = 7),
+    solver = GMRES(n, iterations = 7),
     target = target,
     pairs = 7,
-    min_dimension = 10,
-    max_dimension = 15,
+    subspace_dimensions = 10:15,
     max_iter = 300,
     verbose = true
   )

@@ -2,19 +2,42 @@ export jdqr
 
 import LinearAlgebra.GeneralizedSchur
 
+"""
+Compute an approximate partial Schur decomposition of a square matrix A
+
+    partial_schur, _ = jdqr(A, pairs = 5)
+
+Accepts the following keyword arguments:
+
+- `pairs`: number of Schur vectors and values requested
+- `subspace_dimensions`: a range `min:max` that determines the size of the search subspace.
+  In every outer iteration the search subspace is expanded to the `max` size and then 
+  trimmed to the `min` size. When the search subspace is trimmed, the best approximate Schur
+  vectors are kept. A large search subspace speeds up convergence, but is computationally 
+  more expensive. It is advisable to set `min` a bit larger than `pairs`.
+- `max_iter`: maximum number of steps. If the algorithm exceeds `max_iter` steps, it might
+  not have converged for all `pairs` of Schur vectors.
+- `target`: determines which eigenvalues to find. Options: Near(σ) where σ is a complex
+  number in the complex plane near which we want to find eigenvalues; LargestMagnitude(σ), 
+  SmallestMagnitude(σ), LargestRealPart(σ), SmallestRealPart(σ), LargestImaginaryPart(σ),
+  SmallestImaginaryPart(σ), where σ is a complex number / an educated guess.
+- `tolerance`: the accuracy at which Schur vectors are considered converged, based on 
+  the residual norm.
+- `solver`: An iterative correction equation solver used for the expansion of the search
+  subspace.
+- `verbose`: show debug output.
+"""
 function jdqr(
-    A,                       # Some square matrix
-    solver::Alg;             # Solver for the correction equation
-    pairs::Int = 5,          # Number of eigenpairs wanted
-    min_dimension::Int = 10, # Minimal search space size
-    max_dimension::Int = 20, # Maximal search space size
-    max_iter::Int = 200,
-    target::Target = Near(0.0 + 0im), # Search target
-    ɛ::Float64 = 1e-7,       # Maximum residual norm
+    A;
+    solver::CorrectionSolver = BiCGStabl(size(A, 1), max_mv_products = 10, l = 2),
+    pairs::Integer = 5,
+    subspace_dimensions::AbstractUnitRange{<:Integer} = 10:20,
+    max_iter::Integer = 200,
+    target::Target = Near(0.0 + 0im),
+    tolerance::Float64 = sqrt(eps(real(eltype(A)))),
     T::Type = ComplexF64,
     verbose::Bool = false
-) where {Alg <: CorrectionSolver}
-
+)
     solver_reltol = one(real(T))
     residuals::Vector{real(T)} = []
 
@@ -23,16 +46,16 @@ function jdqr(
     # V's vectors span the search space
     # AV will store (A - tI) * V, without any orthogonalization
     # W will hold AV, but with its columns orthogonal: AV = W * MA
-    V = SubSpace(zeros(T, n, max_dimension))
-    AV = SubSpace(zeros(T, n, max_dimension))
-    W = SubSpace(zeros(T, n, max_dimension))
+    V = SubSpace(zeros(T, n, last(subspace_dimensions)))
+    AV = SubSpace(zeros(T, n, last(subspace_dimensions)))
+    W = SubSpace(zeros(T, n, last(subspace_dimensions)))
 
     # Temporaries (trying to reduces #allocations here)
-    temporary = zeros(T, n, max_dimension)
+    temporary = zeros(T, n, last(subspace_dimensions))
 
     # Projected matrices
-    MA = ProjectedMatrix(zeros(T, max_dimension, max_dimension))
-    M = ProjectedMatrix(zeros(T, max_dimension, max_dimension))
+    MA = ProjectedMatrix(zeros(T, last(subspace_dimensions), last(subspace_dimensions)))
+    M = ProjectedMatrix(zeros(T, last(subspace_dimensions), last(subspace_dimensions)))
 
     # k is the number of converged eigenpairs
     k = 0
@@ -102,7 +125,7 @@ function jdqr(
         # @assert norm(W.all'W.all - I) < 1e-12
         # @assert norm(V.all'V.all - I) < 1e-12
         # @assert norm(M.curr - W.all'V.all) < 1e-12
-        # @assert norm(W.all * MA.curr - AV.all + (pschur.locked * (pschur.locked'AV.all))) < pairs * ɛ
+        # @assert norm(W.all * MA.curr - AV.all + (pschur.locked * (pschur.locked'AV.all))) < pairs * tolerance
 
         search = true
 
@@ -121,7 +144,7 @@ function jdqr(
             verbose && println("Residual = ", resnorm)
 
             # A Ritz vector is converged
-            if resnorm ≤ ɛ
+            if resnorm ≤ tolerance
                 verbose && println("Found an eigenvalue ", λ)
                 push!(converged_ritz_values[iter], λ)
 
@@ -153,19 +176,19 @@ function jdqr(
         end
 
         ### Restart
-        if m == max_dimension
+        if m == last(subspace_dimensions)
             verbose && println("Shrinking the search space.")
 
             # Move min_dimension of the smallest harmonic Ritz values up front
-            keep = 1 : min_dimension
-            schur_sort!(SM(0.0+0im), F, keep)
+            keep = 1 : first(subspace_dimensions)
+            schur_sort!(SmallestMagnitude(0.0+0im), F, keep)
 
-            shrink!(temporary, V, view(F.right, :, keep), min_dimension)
-            shrink!(temporary, AV, view(F.right, :, keep), min_dimension)
-            shrink!(temporary, W, view(F.left, :, keep), min_dimension)
-            shrink!(M, view(F.T, keep, keep), min_dimension)
-            shrink!(MA, view(F.S, keep, keep), min_dimension)
-            m = min_dimension
+            shrink!(temporary, V, view(F.right, :, keep), first(subspace_dimensions))
+            shrink!(temporary, AV, view(F.right, :, keep), first(subspace_dimensions))
+            shrink!(temporary, W, view(F.left, :, keep), first(subspace_dimensions))
+            shrink!(M, view(F.T, keep, keep), first(subspace_dimensions))
+            shrink!(MA, view(F.S, keep, keep), first(subspace_dimensions))
+            m = first(subspace_dimensions)
         end
 
         iter += 1
@@ -178,7 +201,7 @@ function extract_harmonic!(F::GeneralizedSchur, V::SubSpace, AV::SubSpace, r, ps
     # Compute the Schur decomp to find the harmonic Ritz values
 
     # Move the smallest harmonic Ritz value up front
-    schur_sort!(SM(0.0 + 0im), F, 1)
+    schur_sort!(SmallestMagnitude(0.0 + 0im), F, 1)
 
     # Pre-ritz vector
     y = view(F.Z, :, 1)

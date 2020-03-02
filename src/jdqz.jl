@@ -15,22 +15,48 @@ struct Petrov <: TestSubspace end
 struct VariablePetrov <: TestSubspace end
 struct Harmonic <: TestSubspace end
 
+"""
+Compute an approximate partial Schur decomposition of a square matrix A
+
+    partial_schur, _ = jdqz(A, B, pairs = 5)
+
+Accepts the following keyword arguments:
+
+- `testspace`: what test space to use. By default `Harmonic`, which works well when finding
+  interior eigenvalues.
+- `pairs`: number of Schur vectors and values requested
+- `subspace_dimensions`: a range `min:max` that determines the size of the search subspace.
+  In every outer iteration the search subspace is expanded to the `max` size and then 
+  trimmed to the `min` size. When the search subspace is trimmed, the best approximate Schur
+  vectors are kept. A large search subspace speeds up convergence, but is computationally 
+  more expensive. It is advisable to set `min` a bit larger than `pairs`.
+- `max_iter`: maximum number of steps. If the algorithm exceeds `max_iter` steps, it might
+  not have converged for all `pairs` of Schur vectors.
+- `target`: determines which eigenvalues to find. Options: Near(σ) where σ is a complex
+  number in the complex plane near which we want to find eigenvalues; LargestMagnitude(σ), 
+  SmallestMagnitude(σ), LargestRealPart(σ), SmallestRealPart(σ), LargestImaginaryPart(σ),
+  SmallestImaginaryPart(σ), where σ is a complex number / an educated guess.
+- `tolerance`: the accuracy at which Schur vectors are considered converged, based on 
+  the residual norm.
+- `solver`: An iterative correction equation solver used for the expansion of the search
+  subspace.
+- `preconditioner`: Preconditioner used for solving the correction equation.
+- `verbose`: show debug output.
+"""
 function jdqz(
     A,
-    B,
-    solver::Alg;             # Solver for the correction equation
+    B;
+    solver::CorrectionSolver = BiCGStabl(size(A, 1), max_mv_products = 10, l = 2),
     preconditioner = Identity(),
     testspace::Type{<:TestSubspace} = Harmonic,
-    pairs::Int = 5,          # Number of eigenpairs wanted
-    min_dimension::Int = 10, # Minimal search space size
-    max_dimension::Int = 20, # Maximal search space size
-    max_iter::Int = 200,
-    target::Target = LM(-1.0 + 0.0im),       # Search target
-    ɛ::Float64 = 1e-7,       # Maximum residual norm
+    pairs::Integer = 5,
+    subspace_dimensions::AbstractUnitRange{<:Integer} = 10:20,
+    max_iter::Integer = 200,
+    target::Target = LargestMagnitude(1.0 + 0.0im),
+    tolerance::Float64 = sqrt(eps(real(eltype(A)))),
     numT::Type = ComplexF64,
     verbose::Bool = false
-) where {Alg <: CorrectionSolver}
-
+)
     solver_reltol = one(real(numT))
     residuals = real(numT)[]
 
@@ -60,15 +86,15 @@ function jdqz(
     # AV will store A*V, without any orthogonalization
     # BV will store B*V, without any orthogonalization
     # temporary is just a temporary
-    V = SubSpace(zeros(numT, n, max_dimension))
-    W = SubSpace(zeros(numT, n, max_dimension))
-    AV = SubSpace(zeros(numT, n, max_dimension))
-    BV = SubSpace(zeros(numT, n, max_dimension))
-    temporary = zeros(numT, n, max_dimension)
+    V = SubSpace(zeros(numT, n, last(subspace_dimensions)))
+    W = SubSpace(zeros(numT, n, last(subspace_dimensions)))
+    AV = SubSpace(zeros(numT, n, last(subspace_dimensions)))
+    BV = SubSpace(zeros(numT, n, last(subspace_dimensions)))
+    temporary = zeros(numT, n, last(subspace_dimensions))
 
     # Low-dimensional projections: MA = W'AV, MB = W'BV
-    MA = ProjectedMatrix(zeros(numT, max_dimension, max_dimension))
-    MB = ProjectedMatrix(zeros(numT, max_dimension, max_dimension))
+    MA = ProjectedMatrix(zeros(numT, last(subspace_dimensions), last(subspace_dimensions)))
+    MB = ProjectedMatrix(zeros(numT, last(subspace_dimensions), last(subspace_dimensions)))
 
     # QZ = Q' * (preconditioner \ Z), which is used in the correction equation. 
     # QZ_inv = lufact!(copyto!(QZ_inv, QZ))
@@ -154,7 +180,7 @@ function jdqz(
             verbose && println("Resnorm = ", resnorm)
 
             # Store converged Petrov pairs
-            if resnorm ≤ ɛ
+            if resnorm ≤ tolerance
                 verbose && println("Found an eigenvalue: ", α / β)
 
                 # Store the eigenvalue (do this in-place?)
@@ -192,10 +218,10 @@ function jdqz(
             end
         end
 
-        if m == max_dimension
+        if m == last(subspace_dimensions)
             verbose && println("Shrinking the search space.")
 
-            keep = 1 : min_dimension
+            keep = 1 : first(subspace_dimensions)
 
             # Move min_dimension of the smallest harmonic Ritz values up front
             schur_sort!(target, F, keep)
@@ -203,13 +229,13 @@ function jdqz(
             # Shrink V, W, AV
             # Potential optimization: V[:, 1], AV[:, 1], BV[:, 1] and W[:, 1] are already available, 
             # no need to recompute
-            shrink!(temporary, V, view(F.right, :, keep), min_dimension)
-            shrink!(temporary, AV, view(F.right, :, keep), min_dimension)
-            shrink!(temporary, BV, view(F.right, :, keep), min_dimension)
-            shrink!(temporary, W, view(F.left, :, keep), min_dimension)
-            shrink!(MA, view(F.S, keep, keep), min_dimension)
-            shrink!(MB, view(F.T, keep, keep), min_dimension)
-            m = min_dimension
+            shrink!(temporary, V, view(F.right, :, keep), first(subspace_dimensions))
+            shrink!(temporary, AV, view(F.right, :, keep), first(subspace_dimensions))
+            shrink!(temporary, BV, view(F.right, :, keep), first(subspace_dimensions))
+            shrink!(temporary, W, view(F.left, :, keep), first(subspace_dimensions))
+            shrink!(MA, view(F.S, keep, keep), first(subspace_dimensions))
+            shrink!(MB, view(F.T, keep, keep), first(subspace_dimensions))
+            m = first(subspace_dimensions)
         end
 
         iter += 1

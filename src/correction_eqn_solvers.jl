@@ -1,17 +1,17 @@
-export gmres_solver, bicgstabl_solver, exact_solver
+export GMRES, BiCGStabl, Exact
 
 abstract type CorrectionSolver end
 
-struct gmres_solver <: CorrectionSolver
+struct GMRES <: CorrectionSolver
     n::Int
     iterations::Int
     tolerance::Float64
-    function gmres_solver(n::Int; iterations::Int = 5, tolerance::Float64 = 1e-6)
+    function GMRES(n::Int; iterations::Int = 5, tolerance::Float64 = 1e-6)
         new(n, iterations, tolerance)
     end
 end
 
-struct bicgstabl_solver <: CorrectionSolver
+struct BiCGStabl <: CorrectionSolver
     max_mv_products::Int
     tolerance::Float64
     l::Int
@@ -21,7 +21,7 @@ struct bicgstabl_solver <: CorrectionSolver
     γ
     M
 
-    function bicgstabl_solver(n::Int; l::Int = 2, max_mv_products::Int = 5, tolerance::Float64 = 1e-6)
+    function BiCGStabl(n::Int; l::Int = 2, max_mv_products::Int = 5, tolerance::Float64 = 1e-6)
         r_shadow = rand(ComplexF64, n)
         rs = Matrix{ComplexF64}(undef, n, l + 1)
         us = Matrix{ComplexF64}(undef, n, l + 1)
@@ -32,9 +32,9 @@ struct bicgstabl_solver <: CorrectionSolver
     end
 end
 
-struct exact_solver <: CorrectionSolver end
+struct Exact <: CorrectionSolver end
 
-function solve_deflated_correction!(solver::exact_solver, A, x, Q, θ, r::AbstractVector, tol)
+function solve_deflated_correction!(solver::Exact, A, x, Q, θ, r::AbstractVector, tol)
     # The exact solver is mostly useful for testing Jacobi-Davidson
     # method itself and should result in quadratic convergence.
     # However, in general the correction equation should be solved
@@ -53,7 +53,7 @@ function solve_deflated_correction!(solver::exact_solver, A, x, Q, θ, r::Abstra
     copyto!(x, (Ã \ rhs)[1 : n])
 end
 
-function solve_deflated_correction!(solver::bicgstabl_solver, A, x, Q, θ, r::AbstractVector, tol)
+function solve_deflated_correction!(solver::BiCGStabl, A, x, Q, θ, r::AbstractVector, tol)
     n = size(A, 1)
     T = eltype(x)
 
@@ -94,7 +94,7 @@ function solve_deflated_correction!(solver::bicgstabl_solver, A, x, Q, θ, r::Ab
     nothing
 end
 
-function solve_generalized_correction_equation!(solver::exact_solver, A, B, preconditioner, x, Q, Z, precZ, QZ, α, β, r, spare_vector, tol)
+function solve_generalized_correction_equation!(solver::Exact, A, B, preconditioner, x, Q, Z, precZ, QZ, α, β, r, spare_vector, tol)
   n = size(A, 1)
   m = size(Q, 2)
   # Assuming both A and B are sparse while Q and Z are dense, let's try to avoid constructing a huge dense matrix.
@@ -113,7 +113,7 @@ function solve_generalized_correction_equation!(solver::exact_solver, A, B, prec
   y = Q' * (C \ r)
   S = Q' * (C \ Z) # Schur complement
   z = -S \ y
-  ldiv!(x, C, -r - Z * z)
+  x .= C \ (-r - Z * z)
 end
 
 struct QZpreconditioner{T}
@@ -139,7 +139,7 @@ this is simplified in Krylov subspaces as solving
 ``(βA - αB)t = b``
 with the left preconditioner `Pl = (I - Z inv(Q'Z) Q')`
 """
-function solve_generalized_correction_equation!(solver::gmres_solver, A, B, preconditioner, x, Q, Z, precZ, QZ, α, β, r, spare_vector, tol)
+function solve_generalized_correction_equation!(solver::GMRES, A, B, preconditioner, x, Q, Z, precZ, QZ, α, β, r, spare_vector, tol)
     n = size(A, 1)
     @assert n == solver.n
     T = eltype(x)
@@ -168,7 +168,7 @@ function solve_generalized_correction_equation!(solver::gmres_solver, A, B, prec
     nothing
 end
 
-function solve_generalized_correction_equation!(solver::bicgstabl_solver, A, B, preconditioner, x, Q, Z, precZ, QZ, α, β, r, spare_vector, tol)
+function solve_generalized_correction_equation!(solver::BiCGStabl, A, B, preconditioner, x, Q, Z, precZ, QZ, α, β, r, spare_vector, tol)
     n = size(A, 1)
     T = eltype(x)
 

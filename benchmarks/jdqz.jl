@@ -12,13 +12,12 @@ function bench_jdqz_allocs(; n = 10_000, τ = 0.0 + 0.01im)
   result = jdqz(
     A,
     B,
-    bicgstabl_solver(A, max_mv_products = 10), 
+    BiCGStabl(A, max_mv_products = 10), 
     τ = 0.0 + 0.0im, 
     pairs = 20, 
     max_iter = 1000,
-    min_dimension = 10,
-    max_dimension = 15,
-    ɛ = 1e-8,
+    subspace_dimensions = 10:15,
+    tolerance = 1e-8,
     verbose = false
   )
 end
@@ -34,13 +33,12 @@ function bench_jdqz(; n = 1_000, τ = 0.0 + 0.01im)
   jdqz_bench = @benchmark $jdqz(
     $A,
     $B,
-    $bicgstabl_solver($A, max_mv_products = 10), 
+    $BiCGStabl($A, max_mv_products = 10), 
     τ = 0.0 + 0.0im, 
     pairs = 20,
     max_iter = 1000,
-    min_dimension = 10,
-    max_dimension = 15,
-    ɛ = 1e-8,
+    subspace_dimensions = 10:15,
+    tolerance = 1e-8,
   )
 
   eig_bench, jdqz_bench
