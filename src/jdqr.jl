@@ -25,7 +25,7 @@ Accepts the following keyword arguments:
   the residual norm.
 - `solver`: An iterative correction equation solver used for the expansion of the search
   subspace.
-- `verbose`: show debug output.
+- `verbosity=0` silent, `verbosity==1` prints a progress bar, `verbosity==2` prints more detailed debug output.
 """
 function jdqr(
     A;
@@ -36,7 +36,7 @@ function jdqr(
     target::Target = Near(0.0 + 0im),
     tolerance::Float64 = sqrt(eps(real(eltype(A)))),
     T::Type = ComplexF64,
-    verbose::Bool = false
+    verbosity::Number = 0
 )
     solver_reltol = one(real(T))
     residuals::Vector{real(T)} = []
@@ -77,6 +77,10 @@ function jdqr(
     converged_ritz_values::Vector{Vector{T}} = []
 
     local F::GeneralizedSchur
+    local lastλ = T(NaN)
+    local resnorm = real(T(Inf))
+
+    progress = verbosity==1 ? Progress(max_iter) : nothing
 
     while k ≤ pairs && iter ≤ max_iter
         solver_reltol /= 2
@@ -141,11 +145,12 @@ function jdqr(
             push!(converged_ritz_values, copy(pschur.values))
             push!(residuals, resnorm)
 
-            verbose && println("Residual = ", resnorm)
+            verbosity > 1 && println("Residual = ", resnorm)
 
             # A Ritz vector is converged
             if resnorm ≤ tolerance
-                verbose && println("Found an eigenvalue ", λ)
+                verbosity > 1 && println("Found an eigenvalue ", λ)
+                lastλ = λ
                 push!(converged_ritz_values[iter], λ)
 
                 push!(pschur.values, λ)
@@ -177,7 +182,7 @@ function jdqr(
 
         ### Restart
         if m == last(subspace_dimensions)
-            verbose && println("Shrinking the search space.")
+            verbosity > 1 && println("Shrinking the search space.")
 
             # Move min_dimension of the smallest harmonic Ritz values up front
             keep = 1 : first(subspace_dimensions)
@@ -192,6 +197,11 @@ function jdqr(
         end
 
         iter += 1
+        isnothing(progress) ||
+            ProgressMeter.next!(progress,
+                                showvalues=[(:Residual, resnorm),
+                                            (:λ, lastλ),
+                                            (:Pairs, "$(k)/$(pairs)")])
     end
 
     pschur, harmonic_ritz_values, converged_ritz_values, residuals

@@ -3,6 +3,8 @@ export jdqz, Petrov, VariablePetrov, Harmonic
 import LinearAlgebra.axpy!
 import LinearAlgebra.GeneralizedSchur
 
+using ProgressMeter
+
 mutable struct QZ_product{matT}
     QZ::matT
     QZ_inv::matT
@@ -41,7 +43,7 @@ Accepts the following keyword arguments:
 - `solver`: An iterative correction equation solver used for the expansion of the search
   subspace.
 - `preconditioner`: Preconditioner used for solving the correction equation.
-- `verbose`: show debug output.
+- `verbosity=0` silent, `verbosity==1` prints a progress bar, `verbosity==2` prints more detailed debug output.
 """
 function jdqz(
     A,
@@ -55,7 +57,7 @@ function jdqz(
     target::Target = LargestMagnitude(1.0 + 0.0im),
     tolerance::Float64 = sqrt(eps(real(eltype(A)))),
     numT::Type = ComplexF64,
-    verbose::Bool = false
+    verbosity::Number = 0
 )
     solver_reltol = one(real(numT))
     residuals = real(numT)[]
@@ -111,6 +113,10 @@ function jdqz(
     local α::numT
     local β::numT
     local F::GeneralizedSchur
+    local lastλ = numT(NaN)
+    local resnorm = real(numT(Inf))
+
+    progress = verbosity==1 ? Progress(max_iter) : nothing
 
     while k ≤ pairs && iter ≤ max_iter
         solver_reltol /= 2
@@ -177,11 +183,12 @@ function jdqz(
 
             push!(residuals, resnorm)
             
-            verbose && println("Resnorm = ", resnorm)
+            verbosity > 1 && println("Resnorm = ", resnorm)
 
             # Store converged Petrov pairs
             if resnorm ≤ tolerance
-                verbose && println("Found an eigenvalue: ", α / β)
+                verbosity > 1 && println("Found an eigenvalue: ", α / β)
+                lastλ = α / β
 
                 # Store the eigenvalue (do this in-place?)
                 push!(pschur.alphas, α)
@@ -219,7 +226,7 @@ function jdqz(
         end
 
         if m == last(subspace_dimensions)
-            verbose && println("Shrinking the search space.")
+            verbosity > 1 && println("Shrinking the search space.")
 
             keep = 1 : first(subspace_dimensions)
 
@@ -239,6 +246,11 @@ function jdqz(
         end
 
         iter += 1
+        isnothing(progress) ||
+            ProgressMeter.next!(progress,
+                                showvalues=[(:Residual, resnorm),
+                                            (:λ, lastλ),
+                                            (:Pairs, "$(k)/$(pairs)")])
 
         if testspace == VariablePetrov
             γ = sqrt(abs2(α) + abs2(β))
