@@ -70,7 +70,7 @@ pschur, residuals = jdqz(A, B,
     tolerance = 1e-9,
     subspace_dimensions = 10:20,
     max_iter = 100,
-    verbose = true
+    verbosity = 1
 )
 ```
 

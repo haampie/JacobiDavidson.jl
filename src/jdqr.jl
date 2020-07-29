@@ -36,8 +36,12 @@ function jdqr(
     target::Target = Near(0.0 + 0im),
     tolerance::Float64 = sqrt(eps(real(eltype(A)))),
     T::Type = ComplexF64,
-    verbosity::Number = 0
+    verbosity::Number = 0,
+    verbose::Bool = false
 )
+    # `verbose = true` overrides verbosity only when verbosity is not set
+    verbosity = verbosity == 0 && verbose ? 2 : verbosity
+
     solver_reltol = one(real(T))
     residuals::Vector{real(T)} = []
 

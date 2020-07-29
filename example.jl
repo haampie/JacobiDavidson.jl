@@ -53,7 +53,7 @@ function another_example(; n = 1000, target = Near(31.0 + 0.1im))
     tolerance = 1e-9,
     subspace_dimensions = 10:20,
     max_iter = 100,
-    verbose = true
+    verbosity = 1
   )
 
   schur, residuals = jdqz(
@@ -66,7 +66,7 @@ function another_example(; n = 1000, target = Near(31.0 + 0.1im))
     tolerance = 1e-9,
     subspace_dimensions = 10:20,
     max_iter = 100,
-    verbose = true
+    verbosity = 1
   )
 
   plot(residuals, yscale = :log10, label = "BiCGStab", marker = :x)
@@ -86,7 +86,7 @@ function generalized(; n = 1_000, target = Near(0.5 + 0.1im))
     pairs = 10,
     subspace_dimensions = 10:15,
     max_iter = 300,
-    verbose = true
+    verbosity = 1
   )
   
   found = schur.alphas ./ schur.betas
@@ -147,7 +147,7 @@ function test_harmonic(; n = 500, τ = Near(0.01 + 0.02im))
     max_iter = 300,
     tolerance = 1e-5,
     target = τ,
-    verbose = true
+    verbosity = 1
   )
 
   λs = real(eigvals(Matrix(A)))

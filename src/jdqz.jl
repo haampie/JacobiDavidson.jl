@@ -59,6 +59,9 @@ function jdqz(
     numT::Type = ComplexF64,
     verbosity::Number = 0
 )
+    # `verbose = true` overrides verbosity only when verbosity is not set
+    verbosity = verbosity == 0 && verbose ? 2 : verbosity
+
     solver_reltol = one(real(numT))
     residuals = real(numT)[]
 

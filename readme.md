@@ -27,7 +27,7 @@ function run(n = 1000)
     pairs = 7,
     subspace_dimensions = 10:15,
     max_iter = 300,
-    verbose = true
+    verbosity = 1
   )
 
   # The eigenvalues found by Jacobi-Davidson

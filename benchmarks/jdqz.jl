@@ -18,7 +18,7 @@ function bench_jdqz_allocs(; n = 10_000, τ = 0.0 + 0.01im)
     max_iter = 1000,
     subspace_dimensions = 10:15,
     tolerance = 1e-8,
-    verbose = false
+    verbosity = 1
   )
 end
 
