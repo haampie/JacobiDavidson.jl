@@ -1,22 +1,23 @@
-using Documenter, JacobiDavidson
+using JacobiDavidson
+using Documenter
 
-makedocs(
-    modules = [JacobiDavidson],
-    clean = true,
-    format = :html,
-    sitename = "JacobiDavidson.jl",
-    authors = "Harmen Stoppels",
-    pages = [
+makedocs(;
+    modules=[JacobiDavidson],
+    authors="Harmen Stoppels",
+    repo="https://github.com/haampie/JacobiDavidson.jl/blob/{commit}{path}#{line}",
+    sitename="JacobiDavidson.jl",
+    format=Documenter.HTML(;
+        prettyurls=get(ENV, "CI", "false") == "true",
+        canonical="https://haampie.github.io/JacobiDavidson.jl",
+        assets=String[],
+    ),
+    pages=[
         "Home" => "index.md",
         "Correction equation" => "solvers.md"
-    ]
+    ],
+    doctest = false
 )
 
-deploydocs(
-    repo = "github.com/haampie/JacobiDavidson.jl.git",
-    target = "build",
-    osname = "linux",
-    julia  = "0.6",
-    deps = nothing,
-    make = nothing
+deploydocs(;
+    repo="github.com/haampie/JacobiDavidson.jl",
 )
