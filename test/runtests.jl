@@ -1,8 +1,8 @@
 using Test
 
-using JacobiDavidson, LinearAlgebra
+using JacobiDavidson, LinearAlgebra, LinearMaps
 
-@testset "Schur permutations" begin 
+@testset "Schur permutations" begin
     A = rand(ComplexF64, 10, 10)
     B = rand(ComplexF64, 10, 10)
     F = schur(A, B)
@@ -44,3 +44,81 @@ using JacobiDavidson, LinearAlgebra
     @test all(abs(sorted[1]) .≤ abs.(sorted[2 : end]))
 end
 
+@testset "Jacobi–Davidson" begin
+    function myA!(y, x)
+        for i = 1 : length(x)
+            @inbounds y[i] = sqrt(i) * x[i]
+        end
+    end
+
+    function myB!(y, x)
+        for i = 1 : length(x)
+            @inbounds y[i] = x[i] / sqrt(i)
+        end
+    end
+
+    struct SuperPreconditioner{numT <: Number}
+        target::numT
+    end
+
+    function LinearAlgebra.ldiv!(p::SuperPreconditioner{T}, x::AbstractVector{T}) where {T<:Number}
+        for i = 1 : length(x)
+            @inbounds x[i] = x[i] * sqrt(i) / (i - p.target)
+        end
+        return x
+    end
+
+    function LinearAlgebra.ldiv!(y::AbstractVector{T}, p::SuperPreconditioner{T}, x::AbstractVector{T}) where {T<:Number}
+        for i = 1 : length(x)
+            @inbounds y[i] = x[i] * sqrt(i) / (i - p.target)
+        end
+        return y
+    end
+
+    n = 10_000
+    target = Near(5_000.1 + 0.0im)
+    A = LinearMap{Float64}(myA!, n; ismutating = true)
+    B = LinearMap{Float64}(myB!, n; ismutating = true)
+    P = SuperPreconditioner(target.τ)
+
+    @testset "JDQR" begin
+        @testset "Verbosity = $(verbosity)" for verbosity = 1:2
+            pschur, residuals = jdqr(A,
+                                     solver = BiCGStabl(n, max_mv_products = 10, l = 2),
+                                     target = target,
+                                     pairs = 5,
+                                     tolerance = 1e-9,
+                                     subspace_dimensions = 10:20,
+                                     max_iter = 1000,
+                                     verbosity = verbosity
+                                     )
+            verbosity == 1 && println("\n\n\n")
+            λ = sort(real(pschur.values))
+
+            @test λ ≈ sqrt.(2*(4998:0.5:5000)) rtol=1e-12
+        end
+    end
+
+    @testset "JDQZ" begin
+        @testset "Correction solver = $(label)" for (label,solver) in [("BiCGStabl", BiCGStabl(n, max_mv_products = 10, l = 2)),
+                                                                       ("GMRES", GMRES(n))]
+            @testset "Verbosity = $(verbosity)" for verbosity = 1:2
+                pschur, residuals = jdqz(A, B,
+                                         solver = solver,
+                                         preconditioner = P,
+                                         testspace = Harmonic,
+                                         target = target,
+                                         pairs = 5,
+                                         tolerance = 1e-9,
+                                         subspace_dimensions = 10:20,
+                                         max_iter = 100,
+                                         verbosity = verbosity
+                                         )
+                verbosity == 1 && println("\n\n\n")
+                λ = sort(real(pschur.alphas ./ pschur.betas))
+
+                @test λ ≈ 4998:5002 rtol=1e-14
+            end
+        end
+    end
+end
