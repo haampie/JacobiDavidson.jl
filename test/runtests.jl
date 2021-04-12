@@ -95,7 +95,7 @@ end
             verbosity == 1 && println("\n\n\n")
             λ = sort(real(pschur.values))
 
-            @test λ ≈ sqrt.(2*(4998:0.5:5000)) rtol=1e-12
+            @test λ ≈ sqrt.(2*(4998:0.5:5000)) rtol=1e-10
         end
     end
 
@@ -117,7 +117,7 @@ end
                 verbosity == 1 && println("\n\n\n")
                 λ = sort(real(pschur.alphas ./ pschur.betas))
 
-                @test λ ≈ 4998:5002 rtol=1e-14
+                @test λ ≈ 4998:5002 rtol=1e-10
             end
         end
     end
