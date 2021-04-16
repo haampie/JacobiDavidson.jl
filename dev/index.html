@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Home · JacobiDavidson.jl</title><link rel="canonical" href="https://haampie.github.io/JacobiDavidson.jl/"/><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.11.1/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="assets/documenter.js"></script><script src="siteinfo.js"></script><script src="../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-dark.css" data-theme-name="documenter-dark"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit">JacobiDavidson.jl</span></div><form class="docs-search" action="search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li class="is-active"><a class="tocitem" href>Home</a><ul class="internal"><li><a class="tocitem" href="#Jacobi-Davidson-versus-Arnoldi"><span>Jacobi-Davidson versus Arnoldi</span></a></li><li><a class="tocitem" href="#Example"><span>Example</span></a></li></ul></li><li><a class="tocitem" href="solvers/">Correction equation</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Home</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Home</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/haampie/JacobiDavidson.jl/blob/master/docs/src/index.md#" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="JacobiDavidson.jl"><a class="docs-heading-anchor" href="#JacobiDavidson.jl">JacobiDavidson.jl</a><a id="JacobiDavidson.jl-1"></a><a class="docs-heading-anchor-permalink" href="#JacobiDavidson.jl" title="Permalink"></a></h1><p>This package implements the Jacobi-Davidson method for (generalized) non-Hermitian eigenvalue problems involving large, sparse matrices.</p><p>It provides two methods <code>jdqr</code> and <code>jdqz</code> which iteratively generate a partial, approximate Schur decomposition for a matrix <span>$A$</span> or a matrix pencil <span>$(A, B)$</span>. The Schur vectors form an orthonormal basis for eigenspaces, and they can easily be transformed to eigenvectors as well.</p><h2 id="Jacobi-Davidson-versus-Arnoldi"><a class="docs-heading-anchor" href="#Jacobi-Davidson-versus-Arnoldi">Jacobi-Davidson versus Arnoldi</a><a id="Jacobi-Davidson-versus-Arnoldi-1"></a><a class="docs-heading-anchor-permalink" href="#Jacobi-Davidson-versus-Arnoldi" title="Permalink"></a></h2><p>Jacobi-Davidson can be particularly useful compared to Arnoldi when eigenvalues around a specific target <span>$\tau$</span> in the complex plane are requested. For the standard eigenvalue problem, the Arnoldi method would expand the search space using <span>$v_{n+1} = (A - \tau I)^{-1}v_n$</span>. This linear system must be solved rather accurately in order to retain the Arnoldi decomposition.</p><p>The Jacobi-Davidson method on the other hand is not a Krylov subspace method and does not rely on an accurate Arnoldi decomposition; rather it can be seen as a subspace accelerated, approximate Newton method. Each iteration it must solve a linear system as well, but the upside is that it does this only approximately. The basic premise being that there is no need to solve intermediate, approximate solutions in the Newton iterations to full precision.</p><p>This means that Jacobi-Davidson can use a few steps of an iterative method internally, optionally with a preconditioner.</p><h2 id="Example"><a class="docs-heading-anchor" href="#Example">Example</a><a id="Example-1"></a><a class="docs-heading-anchor-permalink" href="#Example" title="Permalink"></a></h2><p>Let <span>$A$</span> and <span>$B$</span> be diagonal matrices of size <span>$n$</span> with <span>$A_{kk} = \sqrt{k}$</span> and <span>$B_{kk} = 1 / \sqrt{k}$</span>. The eigenvalues of the problem <span>$Ax = \lambda Bx$</span> are <span>$1, \dots, n$</span>. The exact inverse of <span>$(A - \tau B)$</span> is used as a preconditioner, namely a diagonal matrix <span>$P$</span> with <span>$P_{kk} = \sqrt{k} / (k - \tau)$</span>.</p><p>We implement these linear operators matrix-free:</p><pre><code class="language-julia">import LinearAlgebra: ldiv!
+
+function myA!(y, x)
+  for i = 1 : length(x)
+    @inbounds y[i] = sqrt(i) * x[i]
+  end
+end
+
+function myB!(y, x)
+  for i = 1 : length(x)
+    @inbounds y[i] = x[i] / sqrt(i)
+  end
+end
+
+struct SuperPreconditioner{numT &lt;: Number}
+  target::numT
+end
+
+function ldiv!(p::SuperPreconditioner{T}, x::AbstractVector{T}) where {T&lt;:Number}
+  for i = 1 : length(x)
+    @inbounds x[i] = x[i] * sqrt(i) / (i - p.target)
+  end
+  return x
+end
+
+function ldiv!(y::AbstractVector{T}, p::SuperPreconditioner{T}, x::AbstractVector{T}) where {T&lt;:Number}
+  for i = 1 : length(x)
+    @inbounds y[i] = x[i] * sqrt(i) / (i - p.target)
+  end
+  return y
+end</code></pre><p>Next we call <code>jdqz</code> to solve the generalized eigenvalue problem for just 5 eigenvalues near 5000.1:</p><pre><code class="language-julia">using JacobiDavidson
+using LinearMaps
+
+n = 10_000
+target = Near(5_000.1 + 0.0im)
+A = LinearMap{Float64}(myA!, n; ismutating = true)
+B = LinearMap{Float64}(myB!, n; ismutating = true)
+P = SuperPreconditioner(target.τ)
+
+pschur, residuals = jdqz(A, B,
+    solver = BiCGStabl(n, max_mv_products = 10, l = 2),
+    preconditioner = P,
+    testspace = Harmonic,
+    target = target,
+    pairs = 5,
+    tolerance = 1e-9,
+    subspace_dimensions = 10:20,
+    max_iter = 100,
+    verbosity = 1
+)</code></pre><p>It finds the eigenvalues from 4998 to 5002. We can then plot the convergence history:</p><pre><code class="language-julia">using Plots
+plot(residuals, marker = :+, yscale = :log10, label = &quot;Residual norm&quot;)</code></pre><p>which shows</p><p><img src="conv.png" alt="Convergence history"/></p></article><nav class="docs-footer"><a class="docs-footer-nextpage" href="solvers/">Correction equation »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Friday 16 April 2021 11:55">Friday 16 April 2021</span>. Using Julia version 1.6.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
