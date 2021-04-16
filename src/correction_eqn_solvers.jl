@@ -157,7 +157,7 @@ function solve_generalized_correction_equation!(solver::GMRES, A, B, preconditio
     # Start with a zero guess
     fill!(x, zero(T))
 
-    iterable = IterativeSolvers.gmres_iterable!(x, Ax_minus_Bx, r, Pl=Pl, tol=tol,
+    iterable = IterativeSolvers.gmres_iterable!(x, Ax_minus_Bx, r, Pl=Pl, reltol=tol,
                                                 restart=solver.iterations,
                                                 initially_zero=true)
 

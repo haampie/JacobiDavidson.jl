@@ -1,6 +1,9 @@
 # Jacobi-Davidson
 
-[![](https://img.shields.io/badge/docs-latest-blue.svg)](https://haampie.github.io/JacobiDavidson.jl/latest)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://haampie.github.io/JacobiDavidson.jl/stable)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://haampie.github.io/JacobiDavidson.jl/dev)
+[![Build Status](https://github.com/haampie/JacobiDavidson.jl/workflows/CI/badge.svg)](https://github.com/haampie/JacobiDavidson.jl/actions)
+[![Coverage](https://codecov.io/gh/haampie/JacobiDavidson.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/haampie/JacobiDavidson.jl)
 
 An implementation of Jacobi-Davidson in Julia. This method can be used as an alternative to Julia's `eigs` to find a few eigenvalues and eigenvectors of a large sparse matrix.
 
