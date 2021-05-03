@@ -1,7 +1,7 @@
 name = "JacobiDavidson"
 uuid = "11c68b98-9c9b-11e8-267b-bbb95576cead"
 authors = ["Harmen Stoppels <me@harmenstoppels.nl>"]
-version = "0.1.0"
+version = "0.1.1"
 
 [deps]
 IterativeSolvers = "42fd0dbc-a981-5370-80f2-aaf504508153"
