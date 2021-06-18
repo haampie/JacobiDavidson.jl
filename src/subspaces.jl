@@ -83,6 +83,9 @@ end
 
 Base.values(pschur::PartialSchur) = pschur.values
 
+right_vectors(pschur::PartialSchur) = pschur.Q.all
+left_vectors(pschur::PartialSchur) = adjoint(right_vectors(pschur))
+
 Base.size(pschur::PartialSchur) = size(pschur.Q)
 
 function Base.show(io::IO, pschur::PartialSchur)
@@ -117,6 +120,9 @@ end
 
 Base.values(pschur::PartialGeneralizedSchur) = pschur.alphas ./ pschur.betas
 
+right_vectors(pschur::PartialGeneralizedSchur) = pschur.Q.all
+left_vectors(pschur::PartialGeneralizedSchur) = pschur.Z.all
+
 Base.size(pschur::PartialGeneralizedSchur) = size(pschur.Q)
 
 function Base.show(io::IO, pschur::PartialGeneralizedSchur)
@@ -141,3 +147,5 @@ function shrink!(M::ProjectedMatrix, replacement, dimension)
     copyto!(view(M.matrix, 1 : dimension, 1 : dimension), replacement)
     resize!(M, dimension)
 end
+
+export right_vectors, left_vectors
