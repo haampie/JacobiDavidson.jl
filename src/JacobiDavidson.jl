@@ -5,6 +5,7 @@ using LinearAlgebra
 using IterativeSolvers
 using Random
 
+import Base: resize!
 import LinearAlgebra: ldiv!
 import LinearAlgebra.BLAS: axpy!, gemv!
 
